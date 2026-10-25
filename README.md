@@ -68,3 +68,5 @@ php tests/http.php
 The source repository has a framework regression suite and an isolated demo fixture for native-cookie and authentication tests. Generated projects instead receive a small application smoke test. Frontend CI builds all six stacks with clean `npm ci` installs. PHP CI covers supported versions, SQLite, and a dedicated MySQL service; local MySQL verification requires the explicit test configuration described in the reference.
 
 This remains an educational framework. Email recovery/verification, MFA, advanced authorization policies and ORM features, and a complete production security model are future work. Keep debug disabled in deployments and point the web server document root at `public/`.
+
+Choose frontend styling with `--style=plain|tailwind|bootstrap`, for example `php nova new my-app --stack=vue --style=tailwind`. Interactive creation offers both choices. Empty PHP projects stay free of Node dependencies. See [project creation](docs/project-creation.md).

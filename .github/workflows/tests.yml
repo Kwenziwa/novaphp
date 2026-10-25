@@ -24,6 +24,7 @@ jobs:
       fail-fast: false
       matrix:
         stack: [vue, react, svelte, solid, preact, alpine]
+        style: [plain, tailwind, bootstrap]
     steps:
       - uses: actions/checkout@v7
       - uses: shivammathur/setup-php@v2
@@ -34,7 +35,7 @@ jobs:
         with:
           node-version: '24'
           package-manager-cache: false
-      - run: php nova new "$RUNNER_TEMP/nova-app" --stack=${{ matrix.stack }}
+      - run: php nova new "$RUNNER_TEMP/nova-app" --stack=${{ matrix.stack }} --style=${{ matrix.style }}
       - run: npm ci --prefix "$RUNNER_TEMP/nova-app"
       - run: npm run build --prefix "$RUNNER_TEMP/nova-app"
       - run: php "$RUNNER_TEMP/nova-app/tests/run.php"

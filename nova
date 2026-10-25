@@ -9,7 +9,7 @@ if (in_array($command, ['--help', '-h'], true)) { $command = 'help'; }
 
 try {
     if ($command === 'new' && in_array($argv[2] ?? '', ['--help', '-h'], true)) {
-        echo "Usage: php nova new directory [--stack=empty|vue|react|svelte|solid|preact|alpine]\n";
+        echo "Usage: php nova new directory [--stack=empty|vue|react|svelte|solid|preact|alpine] [--style=plain|tailwind|bootstrap] [--interactive]\n";
         exit(0);
     }
     $app = in_array($command, ['new', 'help'], true) ? null : require __DIR__ . '/bootstrap/app.php';
@@ -17,19 +17,25 @@ try {
         case 'new':
             $destination = $argv[2] ?? '';
             $stack = null;
+            $style = null;
             $interactive = false;
             foreach (array_slice($argv, 3) as $option) {
                 if (str_starts_with($option, '--stack=') && $stack === null) { $stack = substr($option, 8); }
+                elseif (str_starts_with($option, '--style=') && $style === null) { $style = substr($option, 8); }
                 elseif ($option === '--interactive' && !$interactive) { $interactive = true; }
-                else { throw new RuntimeException('Usage: php nova new directory [--stack=empty|vue|react|svelte|solid|preact|alpine]'); }
+                else { throw new RuntimeException('Usage: php nova new directory [--stack=empty|vue|react|svelte|solid|preact|alpine] [--style=plain|tailwind|bootstrap] [--interactive]'); }
             }
             if ($destination === '') { throw new RuntimeException('Specify a new project directory.'); }
             if ($stack === null) {
                 if (!$interactive && !stream_isatty(STDIN)) { throw new RuntimeException('Non-interactive creation requires --stack=empty or another stack.'); }
                 $stack = \Nova\Console\ProjectCreator::choose(STDIN, STDOUT);
             }
-            $created = (new \Nova\Console\ProjectCreator(__DIR__))->create($destination, $stack);
-            echo "Created $created ($stack).\nNext: cd " . escapeshellarg($created) . " && php nova serve\n";
+            if ($style === null && $stack !== 'empty' && ($interactive || stream_isatty(STDIN))) {
+                $style = \Nova\Console\ProjectCreator::chooseStyle(STDIN, STDOUT);
+            }
+            $style ??= 'plain';
+            $created = (new \Nova\Console\ProjectCreator(__DIR__))->create($destination, $stack, $style);
+            echo "Created $created ($stack, $style).\nNext: cd " . escapeshellarg($created) . " && php nova serve\n";
             if ($stack !== 'empty') { echo "Frontend: npm install, then npm run dev or npm run build.\n"; }
             break;
         case 'serve':
@@ -89,7 +95,7 @@ try {
                 __DIR__ . '/database/migrations'))->run($command, $argv[2] ?? null, ($argv[3] ?? null) === '--sql');
             break;
         case 'help':
-            echo "NovaPHP CLI\n  php nova new directory [--stack=empty|vue|react|svelte|solid|preact|alpine]\n  php nova serve [127.0.0.1:8000]\n  php nova route:list\n  php nova make:controller PostController\n  php nova make:model Post [--table=posts]\n  php nova config:show [app.debug]\n  php nova make:migration create_widgets [--sql]\n  php nova migrate\n  php nova migrate:status\n  php nova migrate:rollback\n";
+            echo "NovaPHP CLI\n  php nova new directory [--stack=empty|vue|react|svelte|solid|preact|alpine] [--style=plain|tailwind|bootstrap] [--interactive]\n  php nova serve [127.0.0.1:8000]\n  php nova route:list\n  php nova make:controller PostController\n  php nova make:model Post [--table=posts]\n  php nova config:show [app.debug]\n  php nova make:migration create_widgets [--sql]\n  php nova migrate\n  php nova migrate:status\n  php nova migrate:rollback\n";
             break;
         default:
             fwrite(STDERR, "Unknown command: {$command}\n");

@@ -30,6 +30,23 @@ try {
             check(isset($package['devDependencies']['vite']) && is_file($target . '/package-lock.json') && is_file($target . '/vite.config.js'), 'generated ' . $stack . ' has a locked frontend blueprint');
         }
     }
+    foreach (array_diff(ProjectCreator::STACKS, ['empty']) as $stack) {
+        foreach (['tailwind', 'bootstrap'] as $style) {
+            $target = $creator->create($projectRoot . '/' . $stack . '-' . $style, $stack, $style);
+            $package = json_decode(file_get_contents($target . '/package.json'), true, 512, JSON_THROW_ON_ERROR);
+            $lock = json_decode(file_get_contents($target . '/package-lock.json'), true, 512, JSON_THROW_ON_ERROR);
+            $metadata = json_decode(file_get_contents($target . '/nova.json'), true, 512, JSON_THROW_ON_ERROR);
+            check($metadata['style'] === $style, "$stack records the selected $style style");
+            check($lock['packages']['']['dependencies'] == $package['dependencies'] && $lock['packages']['']['devDependencies'] == $package['devDependencies'], "$stack $style lockfile matches dependencies");
+            check(str_contains(file_get_contents($target . '/style.css'), $style === 'tailwind' ? '@import "tailwindcss"' : 'bootstrap/dist/css'), "$stack imports selected $style stylesheet");
+        }
+    }
+    fails(fn () => $creator->create($projectRoot . '/bad-style', 'vue', 'unknown'), 'Unknown style');
+    fails(fn () => $creator->create($projectRoot . '/empty-style', 'empty', 'tailwind'), 'Empty projects are PHP-only');
+    $styleInput = fopen('php://memory', 'r+'); $styleOutput = fopen('php://memory', 'r+');
+    fwrite($styleInput, "2\n"); rewind($styleInput);
+    check(ProjectCreator::chooseStyle($styleInput, $styleOutput) === 'tailwind', 'styling menu accepts Tailwind by number');
+    fclose($styleInput); fclose($styleOutput);
     // Creating from an application must not clone that application's private code/config/data.
     file_put_contents($projectRoot . '/empty/app/Controllers/PrivateController.php', '<?php // private application code');
     file_put_contents($projectRoot . '/empty/.env', 'PRIVATE_SECRET=must-not-copy');
@@ -61,6 +78,10 @@ try {
     $cli = escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg(dirname(__DIR__) . '/nova');
     exec($cli . ' new ' . escapeshellarg($projectRoot . '/cli') . ' --stack=empty', $ignored, $status);
     check($status === 0 && is_file($projectRoot . '/cli/nova'), 'CLI new generates an empty project');
+    exec($cli . ' new ' . escapeshellarg($projectRoot . '/cli-styled') . ' --stack=react --style=bootstrap', $ignored, $status);
+    check($status === 0 && json_decode(file_get_contents($projectRoot . '/cli-styled/nova.json'), true)['style'] === 'bootstrap', 'CLI forwards the styling selection');
+    exec('printf "vue\\n2\\n" | ' . $cli . ' new ' . escapeshellarg($projectRoot . '/cli-interactive') . ' --interactive', $ignored, $status);
+    check($status === 0 && json_decode(file_get_contents($projectRoot . '/cli-interactive/nova.json'), true)['style'] === 'tailwind', 'interactive CLI reads both stack and style');
     exec($cli . ' new ' . escapeshellarg($projectRoot . '/no-choice') . ' < /dev/null 2>&1', $ignored, $status);
     check($status === 1 && !file_exists($projectRoot . '/no-choice'), 'non-interactive creation requires an explicit stack');
 } finally { $removeProjectFixture($projectRoot); }

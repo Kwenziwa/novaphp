@@ -10,7 +10,7 @@ From a NovaPHP checkout or generated project, run:
 php nova new my-app
 ```
 
-Choose Empty, Vue, React, Svelte, Solid, Preact, or Alpine. Press Enter for Empty. The destination must not exist, and its parent directory must already exist. Existing directories are never merged or overwritten.
+Choose Empty, Vue, React, Svelte, Solid, Preact, or Alpine. Press Enter for Empty. Frontend stacks then offer Plain CSS, Tailwind, or Bootstrap; press Enter for Plain CSS. The destination must not exist, and its parent directory must already exist. Existing directories are never merged or overwritten.
 
 ## Explicit selection
 
@@ -25,6 +25,20 @@ php nova new my-alpine-app --stack=alpine
 ```
 
 Automation must specify a stack. Use --interactive to explicitly read the selection from standard input when testing an interactive flow. There is no dependency download, Git initialization, database migration, or account creation during generation.
+
+## Choose styling
+
+```bash
+php nova new my-vue-app --stack=vue --style=tailwind
+php nova new my-react-app --stack=react --style=bootstrap
+php nova new my-alpine-app --stack=alpine --style=plain
+```
+
+All six JavaScript stacks support all three styling options. Scripted commands default to plain CSS; use --interactive to prompt for omitted choices. Empty projects stay PHP-only and support plain CSS only. Select a frontend stack for Tailwind or Bootstrap tooling.
+
+Tailwind 4 uses the official Vite plugin and utility classes in the starter. Its style.css explicitly scans App.vue, App.jsx, App.svelte, main.js, main.jsx, and resources/views; add an @source directive there when creating UI files elsewhere. Bootstrap 5 includes its compiled CSS and component classes. Bootstrap JavaScript plugins are optional: import a plugin such as bootstrap/js/dist/collapse when needed; dropdowns, tooltips, and popovers also require @popperjs/core. No CDN is required. Each combination includes a matching package-lock.json, ready for npm ci. The choice is recorded in nova.json.
+
+Installation references: [Tailwind with Vite](https://tailwindcss.com/docs/installation/using-vite) and [Bootstrap with Vite](https://getbootstrap.com/docs/5.3/getting-started/vite/).
 
 ## Empty applications
 
@@ -78,6 +92,7 @@ stubs/
   solid/      Solid dependencies, Vite config, App.jsx, main.jsx
   preact/     Preact dependencies, Vite config, App.jsx, main.jsx
   alpine/     Alpine dependencies, Vite config, main.js
+  styles/     tailwind/ and bootstrap/ overlays for each frontend stack
 ```
 
 Blueprints are trusted project-generation input. Symlinks are rejected. Local application changes do not change the base blueprint; edit stubs/base or a specific frontend stub deliberately to customize generation. Failed generation removes only its own temporary staging directory. Frontend package updates belong in the matching stub and lockfile and should be verified with a clean install/build.

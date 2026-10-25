@@ -1,0 +1,8 @@
+@import "tailwindcss" source(none);
+@source "./App.vue";
+@source "./App.jsx";
+@source "./App.svelte";
+@source "./main.js";
+@source "./main.jsx";
+@source "./resources/views";
+body { background: #f8fafc; }

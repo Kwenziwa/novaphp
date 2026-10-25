@@ -9,14 +9,18 @@ use Throwable;
 
 final class ProjectCreator
 {
+    public const STYLES = ['plain', 'tailwind', 'bootstrap'];
+
     public const STACKS = ['empty', 'vue', 'react', 'svelte', 'solid', 'preact', 'alpine'];
 
     public function __construct(private readonly string $source) {}
 
     /** Generate from an allowlist: never copy Git state, dependencies, local data, or environment secrets. */
-    public function create(string $destination, string $stack): string
+    public function create(string $destination, string $stack, string $style = 'plain'): string
     {
         if (!in_array($stack, self::STACKS, true)) { throw new RuntimeException('Unknown stack. Choose: ' . implode(', ', self::STACKS)); }
+        if (!in_array($style, self::STYLES, true)) { throw new RuntimeException('Unknown style. Choose: ' . implode(', ', self::STYLES)); }
+        if ($stack === 'empty' && $style !== 'plain') { throw new RuntimeException('Empty projects are PHP-only. Choose a frontend stack to use Tailwind or Bootstrap.'); }
         $destination = rtrim($destination, '/');
         $name = basename($destination);
         if (!preg_match('/^[A-Za-z][A-Za-z0-9_-]*$/D', $name)) { throw new RuntimeException('Use a project directory name such as my-app.'); }
@@ -51,10 +55,11 @@ PHPTEST
             if ($stack !== 'empty') {
                 $this->copy($this->source . '/stubs/common', $stage);
                 $this->copy($this->source . '/stubs/' . $stack, $stage);
-                $this->write($stage . '/nova.json', json_encode(['name' => $name, 'stack' => $stack], JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR) . "\n");
+                if ($style !== 'plain') { $this->copy($this->source . '/stubs/styles/' . $style . '/' . $stack, $stage); }
+                $this->write($stage . '/nova.json', json_encode(['name' => $name, 'stack' => $stack, 'style' => $style], JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR) . "\n");
             }
-            $frontend = $stack === 'empty' ? '' : "\nFrontend ($stack):\n\n```bash\nnpm install\nnpm run dev\n# or npm run build, then serve the build through PHP\n```\n\nVite serves the frontend at http://127.0.0.1:5173/build/ and proxies /api requests to http://127.0.0.1:8000. Use NOVA_BACKEND_URL when your PHP server runs elsewhere. After npm run build, the PHP welcome route serves public/build/index.html. Node 22.12+ or 24+ is recommended.\n";
-            $this->write($stage . '/README.md', "# $name\n\nNovaPHP application · stack: $stack\n\n```bash\nphp nova serve\nphp tests/run.php\n```\n\nOpen http://127.0.0.1:8000 and /docs. No application database tables are installed. Create your models, migrations, and routes as needed. Composer is optional.\n" . $frontend);
+            $frontend = $stack === 'empty' ? '' : "\nFrontend ($stack, $style):\n\n```bash\nnpm install\nnpm run dev\n# or npm run build, then serve the build through PHP\n```\n\nVite serves the frontend at http://127.0.0.1:5173/build/ and proxies /api requests to http://127.0.0.1:8000. Use NOVA_BACKEND_URL when your PHP server runs elsewhere. After npm run build, the PHP welcome route serves public/build/index.html. Node 22.12+ or 24+ is recommended.\n";
+            $this->write($stage . '/README.md', "# $name\n\nNovaPHP application · stack: $stack · style: $style\n\n```bash\nphp nova serve\nphp tests/run.php\n```\n\nOpen http://127.0.0.1:8000 and /docs. No application database tables are installed. Create your models, migrations, and routes as needed. Composer is optional.\n" . $frontend);
             // Refuse a late collision too; this command never merges into an existing project.
             if (!@mkdir($target, 0755)) { throw new RuntimeException('Cannot publish project; destination may already exist.'); }
             if (!rename($stage, $target)) {
@@ -95,6 +100,18 @@ PHPTEST
             if (is_dir($file) && !is_link($file)) { $this->removeStage($file); } else { unlink($file); }
         }
         rmdir($path);
+    }
+
+    public static function chooseStyle($input, $output): string
+    {
+        fwrite($output, "Choose styling:\n  1) Plain CSS\n  2) Tailwind\n  3) Bootstrap\nStyle [plain]: ");
+        $line = fgets($input);
+        if ($line === false) { throw new RuntimeException('No styling selection received. Use --style=plain for non-interactive creation.'); }
+        $choice = strtolower(trim($line));
+        if ($choice === '') { return 'plain'; }
+        if (ctype_digit($choice) && isset(self::STYLES[(int) $choice - 1])) { return self::STYLES[(int) $choice - 1]; }
+        if (in_array($choice, self::STYLES, true)) { return $choice; }
+        throw new RuntimeException('Invalid styling selection.');
     }
 
     public static function choose($input, $output): string

@@ -30,8 +30,8 @@ return new class implements Migration {
     public function down(Connection $database): void
     {
         $schema = $database->schema();
-        $schema->dropIndex('notes', 'notes_owner_index');
         if ($database->driver() === 'mysql') { $database->execute('ALTER TABLE notes DROP FOREIGN KEY notes_user_fk'); }
+        $schema->dropIndex('notes', 'notes_owner_index');
         $schema->remove('notes', 'user_id');
         $schema->drop('auth_attempts');
         $schema->drop('users');

@@ -81,6 +81,8 @@ final class Connection
         return $this->statement($sql, $bindings)->rowCount();
     }
 
+    public function schema(): Schema { return new Schema($this); }
+
     public function lastInsertId(): string { return $this->pdo()->lastInsertId(); }
 
     public function transaction(Closure $callback): mixed

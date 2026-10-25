@@ -50,11 +50,14 @@ try {
         case 'migrate':
         case 'migrate:status':
         case 'migrate:rollback':
+            if ($command === 'make:migration' && (count($argv) > 4 || (isset($argv[3]) && $argv[3] !== '--sql'))) {
+                throw new RuntimeException('Usage: php nova make:migration name [--sql]');
+            }
             (new \Nova\Database\Commands($app->container->make(\Nova\Database\Migrator::class),
-                __DIR__ . '/database/migrations'))->run($command, $argv[2] ?? null);
+                __DIR__ . '/database/migrations'))->run($command, $argv[2] ?? null, ($argv[3] ?? null) === '--sql');
             break;
         case 'help':
-            echo "NovaPHP CLI\n  php nova serve [127.0.0.1:8000]\n  php nova route:list\n  php nova make:controller PostController\n  php nova config:show [app.debug]\n  php nova make:migration create_widgets\n  php nova migrate\n  php nova migrate:status\n  php nova migrate:rollback\n";
+            echo "NovaPHP CLI\n  php nova serve [127.0.0.1:8000]\n  php nova route:list\n  php nova make:controller PostController\n  php nova config:show [app.debug]\n  php nova make:migration create_widgets [--sql]\n  php nova migrate\n  php nova migrate:status\n  php nova migrate:rollback\n";
             break;
         default:
             fwrite(STDERR, "Unknown command: {$command}\n");

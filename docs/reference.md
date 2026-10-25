@@ -44,10 +44,10 @@ The small documentation renderer supports headings with anchor IDs, paragraphs, 
 # Verification and limits
 
 ```bash
-php tests/run.php   # Phase 1–4 regression suite
+php tests/run.php   # Phase 1–5 regression suite
 php tests/http.php  # Real HTTP/session smoke test; starts a temporary local server
 ```
 
 The regression suite covers routing, DI, providers, config, environment loading, CLI, middleware order and short-circuits, grouped routes, sessions and flash lifecycle, CSRF, validation, escaped views, redirects, the contact form workflow, SQL parameter binding, transaction failures, migration batches and retries, CLI migrations, notes CRUD, field-map schema constraints and defaults, and both generated migration styles. The HTTP suite checks native cookie attributes, persistent tokens and flash messages, redirects, JSON errors, stateless API compatibility, and notes CRUD persistence across requests. It uses isolated temporary SQLite and session storage and cleans up its server/files. PHP process creation and localhost sockets must be available for the HTTP suite. No test framework is required.
 
-Authentication and ownership, advanced ORM features, rate limiting, session idle/absolute expiry policies, and a hardened production security model remain future work. The static welcome page is loaded as text, not interpreted as a PHP template. Enable `APP_DEBUG=true` only on a private development machine. Deploy with debug disabled and a proper web server document root pointing at `public/`.
+Account recovery, email verification, MFA, a general authorization-policy system, advanced ORM features, general-purpose rate limiting, and a hardened production security model remain future work. Authentication-specific expiry and login throttling are included. The static welcome page is loaded as text, not interpreted as a PHP template. Enable `APP_DEBUG=true` only on a private development machine. Deploy with debug disabled and a proper web server document root pointing at `public/`.

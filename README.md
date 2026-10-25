@@ -1,4 +1,4 @@
-# NovaPHP — Phase 4
+# NovaPHP — Phase 5
 
 An independent educational PHP framework for PHP 8.2+, with no third-party runtime packages. Database features require PDO and `pdo_sqlite` (default) or `pdo_mysql`. Existing non-database routes do not require a database connection.
 
@@ -35,6 +35,10 @@ curl -X POST http://127.0.0.1:8000/api/echo \
 $router->get('/posts', [App\Controllers\PostController::class, 'index']);
 ```
 
+## Phase 5: authentication and ownership
+
+Run `php nova migrate`, then visit `/register` or `/login`. Notes are protected and belong to the signed-in user; existing notes stay unowned and hidden. Login/logout rotate the session and CSRF token. Password hashing, idle/absolute expiry, and persistent login throttling are included. Read [the authentication guide](/docs/authentication) for the JSON flow, configuration, migration behavior, and current limits.
+
 ## Nova Records: models and ORM
 
 NovaPHP's ORM uses explicit connections and named model fields:
@@ -42,8 +46,9 @@ NovaPHP's ORM uses explicit connections and named model fields:
 ```php
 use App\Models\Note;
 
-$notes = Note::using($database)->where('title', 'LIKE', '%Nova%')->orderBy('id', 'desc')->take(20)->all();
-$note = Note::using($database)->create(['title' => 'Hello Nova', 'body' => 'A saved record']);
+$ownerId = $auth->requireUser()['id'];
+$notes = Note::using($database)->where('user_id', $ownerId)->where('title', 'LIKE', '%Nova%')->orderBy('id', 'desc')->take(20)->all();
+$note = Note::using($database)->create(['title' => 'Hello Nova', 'body' => 'A saved record', 'user_id' => $ownerId]);
 $note->title = 'Updated';
 $note->save();
 $note->delete();
@@ -60,7 +65,7 @@ php nova migrate
 php nova serve
 ```
 
-Visit `/notes` to create, list, edit, and delete notes. The browser forms use sessions, CSRF protection, validation, escaped output, and flash messages. The list shows the latest 100 notes. Missing or malformed note IDs return 404. JSON requests to the list/create/update/delete endpoints receive JSON responses; mutations still require a session CSRF token. There is no authentication or ownership yet: this is a shared development demo, so use sample data only.
+Visit `/notes` to create, list, edit, and delete notes. Register or sign in first. The browser forms use authentication, owner-scoped queries, sessions, CSRF protection, validation, escaped output, and flash messages. The list shows the latest 100 notes. Missing or malformed note IDs return 404. JSON requests to the list/create/update/delete endpoints receive JSON responses; mutations still require a session CSRF token. Notes now belong to the signed-in account. Legacy notes retain a null owner and are hidden until deliberately assigned by an administrator; see [authentication and ownership](/docs/authentication).
 
 SQLite defaults to `storage/database.sqlite`. The tracked `storage/` directory must be writable. Relative SQLite paths are resolved from the project root; absolute paths and `:memory:` are also supported. Database files and SQLite sidecars are ignored by Git. Migrations run explicitly, never on HTTP requests or application bootstrap.
 
@@ -353,10 +358,10 @@ Config inspection prints the requested values without redaction; run it locally 
 ## Verification and limits
 
 ```bash
-php tests/run.php   # Phase 1–4 regression suite
+php tests/run.php   # Phase 1–5 regression suite
 php tests/http.php  # Real HTTP/session smoke test; starts a temporary local server
 ```
 
 The regression suite covers routing, DI, providers, config, environment loading, CLI, middleware order and short-circuits, grouped routes, sessions and flash lifecycle, CSRF, validation, escaped views, redirects, the contact form workflow, SQL parameter binding, transaction failures, migration batches and retries, CLI migrations, notes CRUD, field-map schema constraints and defaults, and both generated migration styles. The HTTP suite checks native cookie attributes, persistent tokens and flash messages, redirects, JSON errors, stateless API compatibility, and notes CRUD persistence across requests. It uses isolated temporary SQLite and session storage and cleans up its server/files. PHP process creation and localhost sockets must be available for the HTTP suite. No test framework is required.
 
-Authentication and ownership, advanced ORM features, rate limiting, session idle/absolute expiry policies, and a hardened production security model remain future work. The static welcome page is loaded as text, not interpreted as a PHP template. Enable `APP_DEBUG=true` only on a private development machine. Deploy with debug disabled and a proper web server document root pointing at `public/`.
+Account recovery, email verification, MFA, a general authorization-policy system, advanced ORM features, general-purpose rate limiting, and a hardened production security model remain future work. Authentication-specific expiry and login throttling are included. The static welcome page is loaded as text, not interpreted as a PHP template. Enable `APP_DEBUG=true` only on a private development machine. Deploy with debug disabled and a proper web server document root pointing at `public/`.

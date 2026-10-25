@@ -68,6 +68,17 @@ try {
     httpCheck($status === 422 && isset(json_decode($body, true)['errors']['name']), 'native JSON validation errors');
     httpCheck($fetch('POST', '/api/echo', ['message' => 'compatible'], true)[0] === 201, 'native API compatibility');
     httpCheck(!str_contains(strtolower($fetch('GET', '/api/health')[2]), 'set-cookie:'), 'stateless API creates no session');
+    [$status, , $headers] = $fetch('GET', '/notes');
+    httpCheck($status === 303 && str_contains($headers, 'Location: /login'), 'native guest note access redirects to login');
+    httpCheck($fetch('GET', '/notes', [], true)[0] === 401, 'native JSON guest access returns 401');
+    $anonymousCookie = $cookie;
+    [$status, $body] = $fetch('POST', '/register', ['_token' => $token, 'name' => 'Ada', 'email' => 'ada@example.test',
+        'password' => 'a unique test passphrase', 'password_confirmation' => 'a unique test passphrase'], true);
+    $registered = json_decode($body, true);
+    httpCheck($status === 201 && isset($registered['user']['id']) && !str_contains($body, 'password_hash'), 'native account registration returns safe user data');
+    httpCheck($cookie !== $anonymousCookie && $registered['csrf_token'] !== $token, 'native registration rotates session and CSRF token');
+    $ownerCookie = $cookie;
+    $ownerToken = $registered['csrf_token'];
     [$status, $body] = $fetch('GET', '/notes');
     httpCheck($status === 200 && preg_match('/name="_token" value="([a-f0-9]{64})"/', $body, $noteToken) === 1, 'native notes form');
     httpCheck($fetch('POST', '/notes', ['title' => 'forbidden', 'body' => 'no token'])[0] === 419, 'native notes CSRF rejection');
@@ -77,6 +88,18 @@ try {
     httpCheck(str_contains($fetch('GET', '/notes')[1], '&lt;b&gt;Note&lt;/b&gt;'), 'native notes read escapes persisted HTML');
     httpCheck($fetch('POST', '/notes/' . $id, ['_token' => $noteToken[1], 'title' => 'Updated', 'body' => 'Updated body'], true)[0] === 200, 'native notes update persists');
     httpCheck(str_contains($fetch('GET', '/notes/' . $id . '/edit')[1], 'Updated body'), 'native notes edit reloads persisted data');
+    $cookie = '';
+    [$status, $body] = $fetch('GET', '/csrf-token');
+    $guestToken = json_decode($body, true)['csrf_token'];
+    [$status, $body] = $fetch('POST', '/register', ['_token' => $guestToken, 'name' => 'Grace', 'email' => 'grace@example.test',
+        'password' => 'another unique passphrase', 'password_confirmation' => 'another unique passphrase'], true);
+    $otherToken = json_decode($body, true)['csrf_token'];
+    httpCheck($status === 201 && !str_contains($fetch('GET', '/notes')[1], 'Updated body'), 'native second user cannot list first user notes');
+    httpCheck($fetch('GET', '/notes/' . $id . '/edit')[0] === 404, 'native cross-user edit returns 404');
+    httpCheck($fetch('POST', '/notes/' . $id, ['_token' => $otherToken, 'title' => 'Stolen', 'body' => 'No'], true)[0] === 404, 'native cross-user update denied');
+    httpCheck($fetch('POST', '/notes/' . $id . '/delete', ['_token' => $otherToken], true)[0] === 404, 'native cross-user delete denied');
+    $cookie = $ownerCookie;
+    httpCheck(str_contains($fetch('GET', '/notes/' . $id . '/edit')[1], 'Updated body'), 'native denied writes leave owner note intact');
     httpCheck($fetch('POST', '/notes/' . $id . '/delete', ['_token' => $noteToken[1]], true)[0] === 200, 'native notes delete');
     httpCheck($fetch('GET', '/notes/' . $id . '/edit')[0] === 404, 'native deleted note returns 404');
     [$status, $body, $headers] = $fetch('GET', '/docs/migrations');
@@ -85,6 +108,19 @@ try {
     httpCheck($fetch('GET', '/docs/unknown')[0] === 404, 'native unknown documentation page returns 404');
     httpCheck(str_contains($fetch('GET', '/docs/controllers')[1], 'make:controller'), 'native controller documentation');
     httpCheck(str_contains($fetch('GET', '/docs/models')[1], 'Nova Records'), 'native ORM documentation');
+    httpCheck($fetch('POST', '/logout', [], true)[0] === 419, 'native logout requires CSRF');
+    [$status, $body] = $fetch('POST', '/logout', ['_token' => $ownerToken], true);
+    $logoutToken = json_decode($body, true)['csrf_token'];
+    httpCheck($status === 200 && $cookie !== $ownerCookie && $logoutToken !== $ownerToken, 'native logout clears and rotates session');
+    httpCheck($fetch('GET', '/account', [], true)[0] === 401, 'native logout revokes authentication');
+    $loggedOutCookie = $cookie;
+    $cookie = $ownerCookie;
+    httpCheck($fetch('GET', '/account', [], true)[0] === 401, 'native old authenticated cookie cannot be replayed after logout');
+    $cookie = $loggedOutCookie;
+    [$status, $body] = $fetch('POST', '/login', ['_token' => $logoutToken, 'email' => 'ADA@EXAMPLE.TEST', 'password' => 'a unique test passphrase'], true);
+    $loginData = json_decode($body, true);
+    httpCheck($status === 200 && $loginData['user']['email'] === 'ada@example.test', 'native login verifies password and normalizes email');
+    httpCheck($fetch('POST', '/logout', ['_token' => $logoutToken], true)[0] === 419, 'native login invalidates previous CSRF token');
     echo "HTTP tests passed.\n";
 } finally {
     proc_terminate($process);

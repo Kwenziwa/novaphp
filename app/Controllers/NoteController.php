@@ -12,12 +12,12 @@ use Nova\View\View;
 
 final class NoteController
 {
-    public function __construct(private NoteRepository $notes, private Session $session, private View $view) {}
+    public function __construct(private NoteRepository $notes, private Session $session, private View $view, private \Nova\Auth\Auth $auth) {}
 
     private function render(?array $note = null, array $errors = [], int $status = 200): Response
     {
         return Response::html($this->view->render('notes.index', [
-            'title' => 'Notes demo', 'notes' => $this->notes->all(), 'note' => $note,
+            'title' => 'Your notes', 'user' => $this->auth->requireUser(), 'notes' => $this->notes->all(), 'note' => $note,
             'errors' => $errors, 'token' => $this->session->token(),
             'notice' => $this->session->getFlash('notice'),
         ], 'layouts.app'), $status);

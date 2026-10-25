@@ -21,6 +21,7 @@ Open [the welcome page](http://127.0.0.1:8000) or [the documentation](/docs). Th
 ## Try the included features
 
 - [Controllers](/docs/controllers): route handlers, injection, validation, and responses.
+- [Authentication](/docs/authentication): accounts, sessions, protected routes, and note ownership.
 - [Models](/docs/models): Nova Records queries, persistence, casts, and relations.
 - [Migrations](/docs/migrations): field maps and raw SQL, with reversible changes.
 - [Database](/docs/database): SQLite, MySQL configuration, and transactions.
@@ -34,7 +35,7 @@ php nova migrate
 php nova serve
 ```
 
-The notes demo has no authentication or ownership. Use sample data only. The /contact form demonstrates validation and flash messages without sending or saving messages.
+The notes demo requires registration or login and shows only the current user’s notes. Existing unowned notes remain hidden. The /contact form demonstrates validation and flash messages without sending or saving messages.
 
 ## Run the tests
 

@@ -68,9 +68,14 @@ try {
 }
 
 $notesDb = new Connection(['driver' => 'sqlite', 'database' => ':memory:']);
-$migration = require dirname(__DIR__) . '/database/migrations/2026_10_25_000001_create_notes.php';
-$migration->up($notesDb);
-$repository = new NoteRepository($notesDb);
+(new Migrator($notesDb, dirname(__DIR__) . '/database/migrations'))->migrate();
+$notesDb->execute('INSERT INTO users (name, email, password_hash, created_at) VALUES (?, ?, ?, ?)', ['Fixture', 'fixture@example.test', 'unused-fixture-hash', gmdate('Y-m-d H:i:s')]);
+$fixtureUser = (int) $notesDb->lastInsertId();
+$fixtureSession = new Session(native: false);
+$fixtureSession->start();
+$fixtureSession->put('_auth', ['id' => $fixtureUser, 'issued' => time(), 'seen' => time()]);
+$fixtureAuth = new \Nova\Auth\Auth($notesDb, $fixtureSession, new \Nova\Config\Repository(), new \Nova\Auth\AttemptLimiter($notesDb));
+$repository = new NoteRepository($notesDb, $fixtureAuth);
 $id = $repository->create(['title' => $attack, 'body' => '<script>alert(1)</script>']);
 check($repository->find($id)['title'] === $attack && count($repository->all()) === 1, 'notes repository create and read');
 $repository->update($id, ['title' => 'Updated', 'body' => 'Body']);
@@ -79,7 +84,11 @@ check($repository->delete($id) === 1 && $repository->find($id) === null, 'notes 
 
 $demo = require dirname(__DIR__) . '/bootstrap/app.php';
 $demo->container->instance(Connection::class, $notesDb);
-$demo->container->instance(Session::class, new Session(native: false));
+$demoSession = new Session(native: false);
+$demoSession->start();
+$demoSession->put('_auth', ['id' => $fixtureUser, 'issued' => time(), 'seen' => time()]);
+$demoSession->close();
+$demo->container->instance(Session::class, $demoSession);
 $form = $demo->handle(new Request('GET', '/notes'));
 preg_match('/name="_token" value="([a-f0-9]+)"/', $form->body, $match);
 $token = $match[1];

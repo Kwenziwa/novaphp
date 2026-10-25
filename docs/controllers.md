@@ -24,18 +24,17 @@ Add routes to routes/web.php or routes/api.php. The router builds class controll
 
 ## Inject services and use models
 
-This example uses the existing Note model and notes table. Its method can be mapped to a GET route such as /notes-json/{id}:
+This example uses the existing Note model and notes table. Its method can be mapped to a GET route such as /notes-json/{id} behind StartSession and RequireAuth:
 
 ```php
 namespace App\Controllers;
 
-use App\Models\Note;
-use Nova\Database\Connection;
+use App\Repositories\NoteRepository;
 use Nova\Http\Response;
 
 final class NoteReaderController
 {
-    public function __construct(private Connection $database) {}
+    public function __construct(private NoteRepository $notes) {}
 
     public function show(string $id): Response
     {
@@ -43,7 +42,7 @@ final class NoteReaderController
             return Response::text('404 Not Found', 404);
         }
 
-        $note = Note::using($this->database)->find((int) $id);
+        $note = $this->notes->find((int) $id);
         return $note === null
             ? Response::text('404 Not Found', 404)
             : Response::json(['note' => $note]);
@@ -55,7 +54,7 @@ Constructor dependencies are auto-wired. Handler arguments resolve in this order
 
 ## Validate before writing
 
-Inside a controller with an injected Connection:
+Inside a controller with an injected NoteRepository and RequireAuth middleware:
 
 ```php
 public function store(\Nova\Http\Request $request): \Nova\Http\Response
@@ -64,8 +63,8 @@ public function store(\Nova\Http\Request $request): \Nova\Http\Response
         'title' => 'required|string|max:100',
         'body' => 'required|string|max:10000',
     ]);
-    $note = \App\Models\Note::using($this->database)->create($data);
-    return \Nova\Http\Response::json(['note' => $note], 201);
+    $id = $this->notes->create($data);
+    return \Nova\Http\Response::json(['note' => $this->notes->find($id)], 201);
 }
 ```
 
@@ -85,4 +84,4 @@ return \Nova\Http\Response::html(
 
 Use the view's $e helper for values in HTML text and quoted attributes. Templates are not automatically escaped. Handle missing records with a 404, and use local redirects for browser form flows.
 
-The complete application example is app/Controllers/NoteController.php. It uses NoteRepository, which now delegates persistence to Nova Records while keeping the HTTP layer separate. A repository is optional; controllers can query a model directly when the operation is small.
+The complete application example is app/Controllers/NoteController.php. It uses NoteRepository, which now delegates persistence to Nova Records while keeping the HTTP layer separate. Controllers can query models directly for small operations, but must explicitly enforce ownership. The notes repository scopes queries and supplies the trusted owner ID.

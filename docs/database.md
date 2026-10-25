@@ -7,7 +7,7 @@ php nova migrate
 php nova serve
 ```
 
-Visit `/notes` to create, list, edit, and delete notes. The browser forms use sessions, CSRF protection, validation, escaped output, and flash messages. The list shows the latest 100 notes. Missing or malformed note IDs return 404. JSON requests to the list/create/update/delete endpoints receive JSON responses; mutations still require a session CSRF token. There is no authentication or ownership yet: this is a shared development demo, so use sample data only.
+Visit `/notes` to create, list, edit, and delete notes. Register or sign in first. The browser forms use authentication, owner-scoped queries, sessions, CSRF protection, validation, escaped output, and flash messages. The list shows the latest 100 notes. Missing or malformed note IDs return 404. JSON requests to the list/create/update/delete endpoints receive JSON responses; mutations still require a session CSRF token. Notes now belong to the signed-in account. Legacy notes retain a null owner and are hidden until deliberately assigned by an administrator; see [authentication and ownership](/docs/authentication).
 
 SQLite defaults to `storage/database.sqlite`. The tracked `storage/` directory must be writable. Relative SQLite paths are resolved from the project root; absolute paths and `:memory:` are also supported. Database files and SQLite sidecars are ignored by Git. Migrations run explicitly, never on HTTP requests or application bootstrap.
 

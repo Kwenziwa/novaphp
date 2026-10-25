@@ -1,5 +1,6 @@
-<h1>Notes demo</h1>
-<p>Shared development demo: anyone who can access this page can read, change, or delete these notes. Use sample data only.</p>
+<h1>Your notes</h1>
+<p>Signed in as <?= $e($user['name']) ?>. These notes belong to your account. <a href="/account">Your account</a></p>
+<form method="post" action="/logout"><input type="hidden" name="_token" value="<?= $e($token) ?>"><button type="submit">Sign out</button></form>
 <?php if ($notice): ?><p role="status"><?= $e($notice) ?></p><?php endif ?>
 <?php if ($errors): ?><div role="alert"><ul>
 <?php foreach ($errors as $messages): foreach ($messages as $message): ?><li><?= $e($message) ?></li><?php endforeach; endforeach ?>

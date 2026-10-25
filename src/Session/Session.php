@@ -80,8 +80,16 @@ final class Session
     public function regenerate(): void
     {
         $this->requireStarted();
+        if ($this->native) { $_SESSION = $this->data; }
         if ($this->native && !session_regenerate_id(true)) { throw new RuntimeException('Unable to regenerate session.'); }
         $this->forget('_csrf');
+    }
+
+    public function invalidate(): void
+    {
+        $this->requireStarted();
+        $this->data = [];
+        $this->regenerate();
     }
 
     public function close(): void

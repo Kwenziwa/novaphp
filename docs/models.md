@@ -23,13 +23,18 @@ use Nova\Database\Record;
 final class Note extends Record
 {
     protected const TABLE = 'notes';
-    protected const WRITABLE = ['title', 'body'];
+    protected const WRITABLE = ['title', 'body', 'user_id'];
+    protected const CASTS = ['user_id' => 'int'];
     protected const CREATED_AT = 'created_at';
     protected const DATE_FORMAT = 'c';
 }
 ```
 
 TABLE is required. Models use an auto-increment integer primary key named id by default; override KEY for another integer auto-increment column name. Composite, UUID, string, and manually assigned primary keys are not supported in this version. Primary keys and automatic timestamp fields cannot be mass-assigned, even if listed in WRITABLE.
+
+## Ownership with authentication
+
+The application now protects notes through an authenticated, ownership-scoped NoteRepository. Prefer injecting that repository for HTTP-facing note operations. Nova Records itself does not apply a user scope automatically. Every direct query for private data needs an explicit owner condition, and owner IDs must come from Auth rather than request input. See [authentication and ownership](/docs/authentication).
 
 ## Query records
 
@@ -38,16 +43,18 @@ Inject Nova\Database\Connection into your controller or repository, then choose 
 ```php
 use App\Models\Note;
 
+$ownerId = $auth->requireUser()['id'];
 $notes = Note::using($database)
+    ->where('user_id', $ownerId)
     ->where('title', 'LIKE', '%Nova%')
     ->orderBy('id', 'desc')
     ->take(20)
     ->skip(0)
     ->all();
 
-$note = Note::using($database)->find(1);
-$first = Note::using($database)->where('title', 'Welcome')->first();
-$total = Note::using($database)->count();
+$note = Note::using($database)->where('user_id', $ownerId)->find(1);
+$first = Note::using($database)->where('user_id', $ownerId)->where('title', 'Welcome')->first();
+$total = Note::using($database)->where('user_id', $ownerId)->count();
 ```
 
 all returns an array of model objects. first and find return a model or null. count counts filtered rows and ignores sorting and pagination. Unbounded all loads all matching rows, so use take for lists. take accepts 1 through 10000; skip accepts non-negative offsets. Use a deterministic order, normally a unique key, when paginating.
@@ -55,7 +62,7 @@ all returns an array of model objects. first and find return a model or null. co
 Supported comparisons are =, !=, <>, <, <=, >, >=, LIKE, and NOT LIKE. Two arguments to where mean equality. Chained conditions are AND conditions. There are no raw conditions or OR groups yet.
 
 ```php
-$query = Note::using($database);
+$query = Note::using($database)->where('user_id', $auth->requireUser()['id']);
 $selected = $query->whereIn('id', [1, 2, 3])->all();
 $missingBody = $query->whereNull('body')->all();
 $presentBody = $query->where('body', '!=', null)->all();
@@ -67,6 +74,7 @@ Queries are immutable: filtering $query does not change the original query. An e
 
 ```php
 $note = Note::using($database)->create([
+    'user_id' => $auth->requireUser()['id'], // Trusted server-side owner.
     'title' => 'Hello NovaPHP',
     'body' => 'My first record.',
 ]);
@@ -147,9 +155,10 @@ Relations are explicit method calls and perform queries when called. They are no
 ## Transactions, raw SQL, and limits
 
 ```php
-$database->transaction(function (Nova\Database\Connection $database) {
-    Note::using($database)->create(['title' => 'One', 'body' => 'First']);
-    Note::using($database)->create(['title' => 'Two', 'body' => 'Second']);
+$ownerId = $auth->requireUser()['id'];
+$database->transaction(function (Nova\Database\Connection $database) use ($ownerId) {
+    Note::using($database)->create(['title' => 'One', 'body' => 'First', 'user_id' => $ownerId]);
+    Note::using($database)->create(['title' => 'Two', 'body' => 'Second', 'user_id' => $ownerId]);
 });
 ```
 

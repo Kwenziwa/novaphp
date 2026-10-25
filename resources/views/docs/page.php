@@ -16,7 +16,7 @@
 <?php endforeach ?>
 </nav><p class="sidebar-note">Independent PHP.<br>Small pieces. Clear foundations.</p></aside>
 <main id="main" tabindex="-1">
-<div class="page-meta"><span>NovaPHP · Phase 4</span><span>PHP 8.2+</span></div>
+<div class="page-meta"><span>NovaPHP · Phase 5</span><span>PHP 8.2+</span></div>
 <article class="prose"><?= $content /* HTML produced by the escaping Markdown renderer. */ ?></article>
 <?php $keys = array_keys($pages); $position = array_search($page, $keys, true); ?>
 <nav class="page-turns" aria-label="Guide pages">

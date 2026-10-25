@@ -12,6 +12,7 @@ final class Request
         private readonly array $query = [],
         private readonly array $body = [],
         private readonly array $headers = [],
+        private readonly string $clientIp = '127.0.0.1',
     ) {}
 
     public static function fromGlobals(): self
@@ -33,8 +34,10 @@ final class Request
             $decoded = json_decode(file_get_contents('php://input') ?: '', true);
             $body = is_array($decoded) ? $decoded : [];
         }
-        return new self($method, $path, $_GET, $body, $headers);
+        return new self($method, $path, $_GET, $body, $headers, (string) ($_SERVER['REMOTE_ADDR'] ?? 'unknown'));
     }
+
+    public function ip(): string { return $this->clientIp; }
 
     public function expectsJson(): bool
     {

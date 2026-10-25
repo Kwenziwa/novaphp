@@ -27,4 +27,5 @@ require __DIR__ . "/phase4.php";
 require __DIR__ . "/schema.php";
 require __DIR__ . "/docs.php";
 require __DIR__ . "/records.php";
+require __DIR__ . "/auth.php";
 echo "All tests passed.\n";

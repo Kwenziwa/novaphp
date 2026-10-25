@@ -5,7 +5,7 @@ declare(strict_types=1);
 use Nova\Database\{Connection, Migrator};
 use Nova\Http\Request;
 use Nova\Session\Session;
-use App\Repositories\NoteRepository;
+use Tests\Fixtures\Demo\Repositories\NoteRepository;
 
 $db = new Connection(['driver' => 'sqlite', 'database' => ':memory:']);
 check($db->pdo() === $db->pdo(), 'database shares lazy PDO connection');
@@ -68,13 +68,13 @@ try {
 }
 
 $notesDb = new Connection(['driver' => 'sqlite', 'database' => ':memory:']);
-(new Migrator($notesDb, dirname(__DIR__) . '/database/migrations'))->migrate();
+(new Migrator($notesDb, __DIR__ . '/Fixtures/Demo/database/migrations'))->migrate();
 $notesDb->execute('INSERT INTO users (name, email, password_hash, created_at) VALUES (?, ?, ?, ?)', ['Fixture', 'fixture@example.test', 'unused-fixture-hash', gmdate('Y-m-d H:i:s')]);
 $fixtureUser = (int) $notesDb->lastInsertId();
 $fixtureSession = new Session(native: false);
 $fixtureSession->start();
 $fixtureSession->put('_auth', ['id' => $fixtureUser, 'issued' => time(), 'seen' => time()]);
-$fixtureAuth = new \Nova\Auth\Auth($notesDb, $fixtureSession, new \Nova\Config\Repository(), new \Nova\Auth\AttemptLimiter($notesDb));
+$fixtureAuth = new \Nova\Auth\Auth(new \Nova\Auth\DatabaseUserProvider($notesDb, new \Nova\Config\Repository()), $fixtureSession, new \Nova\Config\Repository(), new \Nova\Auth\AttemptLimiter($notesDb));
 $repository = new NoteRepository($notesDb, $fixtureAuth);
 $id = $repository->create(['title' => $attack, 'body' => '<script>alert(1)</script>']);
 check($repository->find($id)['title'] === $attack && count($repository->all()) === 1, 'notes repository create and read');
@@ -82,7 +82,7 @@ $repository->update($id, ['title' => 'Updated', 'body' => 'Body']);
 check($repository->find($id)['title'] === 'Updated', 'notes repository update');
 check($repository->delete($id) === 1 && $repository->find($id) === null, 'notes repository delete');
 
-$demo = require dirname(__DIR__) . '/bootstrap/app.php';
+$demo = require __DIR__ . '/Fixtures/Demo/bootstrap.php';
 $demo->container->instance(Connection::class, $notesDb);
 $demoSession = new Session(native: false);
 $demoSession->start();
@@ -114,6 +114,8 @@ check($json->status === 422 && isset(json_decode($json->body, true)['errors']['t
 // Exercise CLI commands against a temporary file database, never the developer database.
 $tempDb = tempnam(sys_get_temp_dir(), 'nova-cli-db-');
 $cli = escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg(dirname(__DIR__) . '/nova');
+$cliMigration = dirname(__DIR__) . '/database/migrations/2099_01_01_000001_nova_cli_fixture.php';
+file_put_contents($cliMigration, $fixture('nova_cli_fixture'));
 $previous = ['DB_CONNECTION' => getenv('DB_CONNECTION'), 'DB_DATABASE' => getenv('DB_DATABASE')];
 try {
     putenv('DB_CONNECTION=sqlite');
@@ -141,4 +143,5 @@ try {
 } finally {
     foreach ($previous as $key => $value) { putenv($value === false ? $key : $key . '=' . $value); }
     unlink($tempDb);
+    unlink($cliMigration);
 }

@@ -1,0 +1,1 @@
+<h1>NovaPHP fixture</h1>

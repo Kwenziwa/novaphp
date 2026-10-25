@@ -102,6 +102,15 @@ final class RecordQuery
         return array_map(fn (array $row): Record => $this->model::hydrate($this->database, $row), $this->database->select($sql, $bindings));
     }
 
+    public function paginate(int $perPage = 20, int $page = 1): Page
+    {
+        if ($page < 1 || $perPage < 1 || $perPage > 10000 || $page > intdiv(PHP_INT_MAX, $perPage)) {
+            throw new InvalidArgumentException('Invalid pagination page or size.');
+        }
+        $query = $this->orders === [] ? $this->orderBy($this->model::keyName()) : $this;
+        return new Page($query->take($perPage)->skip(($page - 1) * $perPage)->all(), $this->count(), $perPage, $page);
+    }
+
     public function first(): ?Record { return $this->take(1)->all()[0] ?? null; }
 
     public function find(int|string $id): ?Record { return $this->where($this->model::keyName(), $id)->first(); }

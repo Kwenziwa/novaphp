@@ -69,12 +69,14 @@ final class Application
             if ($request->expectsJson()) { return Response::json(['errors' => $error->errors], 422); }
             $messages = htmlspecialchars(json_encode($error->errors, JSON_THROW_ON_ERROR), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
             return Response::html('<h1>Validation failed</h1><pre>' . $messages . '</pre>', 422);
+        } catch (\Nova\Http\HttpException $error) {
+            return Response::error($request, $error->getMessage(), $error->status);
         } catch (Throwable $error) {
             error_log('[NovaPHP] ' . (string) $error);
             if ($this->config->get('app.debug', false)) {
                 return Response::text('500 Internal Server Error' . "\n" . (string) $error, 500);
             }
-            return Response::text('500 Internal Server Error', 500);
+            return Response::error($request, 'Internal Server Error', 500);
         }
     }
 }

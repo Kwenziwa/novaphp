@@ -97,7 +97,7 @@ public function down(Connection $database): void
 }
 ```
 
-Raw SQL is executed as written and must match your database dialect. Use bindings for data values. You can create a table with `schema()->create()` and then insert data with `execute()` in the same migration; use the complete field-map example above and add the bound insert in its `up()` method. Documentation code blocks are never executed by the browser preview. The original notes migration remains unchanged, and existing raw SQL migrations continue to work.
+Raw SQL is executed as written and must match your database dialect. Use bindings for data values. You can create a table with `schema()->create()` and then insert data with `execute()` in the same migration; use the complete field-map example above and add the bound insert in its `up()` method. Documentation code blocks are never executed by the browser preview. The starter installs no application migrations. Existing raw SQL migrations continue to work.
 
 Pending files apply in filename order. `nova_migrations` tracks applied names, batches, and UTC timestamps. Repeating `migrate` skips applied files; each invocation with new migrations receives the next batch number. `migrate:rollback` reverses the latest batch in reverse filename order. It can delete tables/data through the migration's `down()` method. Status shows applied/pending migrations, batches, and missing files; it initializes the history table if needed. Do not edit or rename applied migrations—add a new migration instead.
 

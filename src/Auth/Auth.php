@@ -5,17 +5,15 @@ declare(strict_types=1);
 namespace Nova\Auth;
 
 use Nova\Config\Repository;
-use Nova\Database\Connection;
 use Nova\Session\Session;
 use Nova\Validation\{ValidationException, Validator};
-use PDOException;
 use RuntimeException;
 
 final class Auth
 {
     private const DUMMY_HASH = '$2y$12$Pc2trIOBpWTIyV5iFzqvB.FYIotymj/nl0pzZdyQ8HZDRvRED8pd.';
 
-    public function __construct(private readonly Connection $database, private readonly Session $session,
+    public function __construct(private readonly UserProvider $users, private readonly Session $session,
         private readonly Repository $config, private readonly AttemptLimiter $limiter) {}
 
     public function user(): ?array
@@ -32,9 +30,9 @@ final class Auth
             $this->logout();
             return null;
         }
-        $user = $this->database->first('SELECT id, name, email FROM users WHERE id = ?', [$state['id']]);
+        $user = $this->users->findById($state['id']);
         if ($user === null) { $this->logout(); return null; }
-        $user['id'] = (int) $user['id'];
+        $user = ['id' => (int) $user['id'], 'name' => $user['name'], 'email' => $user['email']];
         $state['seen'] = $now;
         $this->session->put('_auth', $state);
         return $user;
@@ -63,29 +61,20 @@ final class Auth
             throw new ValidationException(['password' => ['Use a password of at least 15 characters and at most 72 bytes, without null bytes.']]);
         }
         $hash = password_hash($password, PASSWORD_BCRYPT, ['cost' => 12]);
-        try {
-            $this->database->execute('INSERT INTO users (name, email, password_hash, created_at) VALUES (?, ?, ?, ?)',
-                [$name, $email, $hash, gmdate('Y-m-d H:i:s')]);
-        } catch (PDOException $error) {
-            if (in_array((string) $error->getCode(), ['23000', '23505'], true)) {
-                throw new ValidationException(['email' => ['Unable to register with these details.']]);
-            }
-            throw $error;
-        }
-        return $this->establish((int) $this->database->lastInsertId());
+        $user = $this->users->create($name, $email, $hash);
+        return $this->establish((int) $user['id']);
     }
 
     public function attempt(string $email, #[\SensitiveParameter] string $password, string $ip): bool
     {
         $email = strtolower(trim($email));
         $this->limiter->consume(['login:account:' . $email => 5, 'login:ip:' . $ip => 30]);
-        $user = strlen($email) <= 254 ? $this->database->first('SELECT id, password_hash FROM users WHERE email = ?', [$email]) : null;
+        $user = strlen($email) <= 254 ? $this->users->findByEmail($email) : null;
         $validInput = strlen($password) <= 72 && !str_contains($password, "\0");
         $verified = password_verify($validInput ? $password : '', $user['password_hash'] ?? self::DUMMY_HASH);
         if (!$validInput || $user === null || !$verified) { return false; }
         if (password_needs_rehash($user['password_hash'], PASSWORD_BCRYPT, ['cost' => 12])) {
-            $this->database->execute('UPDATE users SET password_hash = ? WHERE id = ? AND password_hash = ?',
-                [password_hash($password, PASSWORD_BCRYPT, ['cost' => 12]), $user['id'], $user['password_hash']]);
+            $this->users->rehash((int) $user['id'], $user['password_hash'], password_hash($password, PASSWORD_BCRYPT, ['cost' => 12]));
         }
         $this->limiter->clear('login:account:' . $email);
         $this->establish((int) $user['id']);

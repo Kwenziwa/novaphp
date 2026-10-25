@@ -1,0 +1,13 @@
+/vendor/
+/.env
+/storage/logs/*.log
+
+.env
+.env.*
+!.env.example
+
+/storage/*.sqlite*
+.nova-migrate.lock
+
+/node_modules/
+/public/build/

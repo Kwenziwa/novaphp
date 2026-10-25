@@ -1,0 +1,64 @@
+name: Framework tests
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  php:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.2', '8.3', '8.4', '8.5']
+    steps:
+      - uses: actions/checkout@v7
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: pdo_sqlite
+          coverage: none
+      - run: php tests/run.php
+      - run: php tests/http.php
+  frontend:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        stack: [vue, react, svelte, solid, preact, alpine]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          coverage: none
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - run: php nova new "$RUNNER_TEMP/nova-app" --stack=${{ matrix.stack }}
+      - run: npm ci --prefix "$RUNNER_TEMP/nova-app"
+      - run: npm run build --prefix "$RUNNER_TEMP/nova-app"
+      - run: php "$RUNNER_TEMP/nova-app/tests/run.php"
+  mysql:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: fixture-password
+          MYSQL_DATABASE: novaphp_test
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -pfixture-password"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: pdo_mysql
+          coverage: none
+      - run: php tests/mysql.php
+        env:
+          NOVA_MYSQL_TEST: '1'
+          NOVA_MYSQL_DATABASE: novaphp_test
+          NOVA_MYSQL_PASSWORD: fixture-password

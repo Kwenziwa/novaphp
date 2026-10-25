@@ -1,87 +1,60 @@
 # Controllers
 
-Controllers connect HTTP requests to your application. Keep validation and responses here, put persistent data rules in models or repositories, and render HTML with views.
+Controllers connect HTTP requests to application services and responses. The clean starter includes only a welcome controller and the documentation controller; application controllers are generated when needed.
 
-## Generate a controller
+## Generate and register
 
 ```bash
 php nova make:controller PostController
 ```
 
-This creates app/Controllers/PostController.php with an index method. Names must be simple PHP class names ending in Controller. The command refuses to overwrite a file. It does not create routes or a complete resource controller automatically.
-
-## Register controller routes
+The generator writes app/Controllers/PostController.php with an index method and refuses an existing file. Add routes yourself:
 
 ```php
 use App\Controllers\PostController;
 
-$router->get('/posts', [PostController::class, 'index']);
-$router->get('/posts/{id}', [PostController::class, 'show']);
+$router->get('/posts', [PostController::class, 'index'], name: 'posts.index');
+$router->get('/posts/{id}', [PostController::class, 'show'], name: 'posts.show');
 $router->post('/posts', [PostController::class, 'store']);
 ```
 
-Add routes to routes/web.php or routes/api.php. The router builds class controllers through the container. Route argument names match placeholders, so {id} maps to $id. Explicitly validate identifiers before querying. Automatic model binding is not implemented.
-
-## Inject services and use models
-
-This example uses the existing Note model and notes table. Its method can be mapped to a GET route such as /notes-json/{id} behind StartSession and RequireAuth:
+## Inject services
 
 ```php
 namespace App\Controllers;
 
-use App\Repositories\NoteRepository;
-use Nova\Http\Response;
+use App\Models\Post;
+use Nova\Database\Connection;
+use Nova\Http\{Request, Response};
 
-final class NoteReaderController
+final class PostController
 {
-    public function __construct(private NoteRepository $notes) {}
+    public function __construct(private Connection $database) {}
 
     public function show(string $id): Response
     {
-        if (!ctype_digit($id) || filter_var($id, FILTER_VALIDATE_INT) === false) {
-            return Response::text('404 Not Found', 404);
-        }
+        if (!ctype_digit($id)) { return Response::text('404 Not Found', 404); }
+        $post = Post::using($this->database)->find($id);
+        return $post === null ? Response::text('404 Not Found', 404) : Response::json(['post' => $post]);
+    }
 
-        $note = $this->notes->find((int) $id);
-        return $note === null
-            ? Response::text('404 Not Found', 404)
-            : Response::json(['note' => $note]);
+    public function store(Request $request): Response
+    {
+        $data = $request->validate(['title' => 'required|string|max:150']);
+        $post = Post::using($this->database)->create($data);
+        return Response::json(['post' => $post], 201);
     }
 }
 ```
 
-Constructor dependencies are auto-wired. Handler arguments resolve in this order: current Request, named route parameter, declared default, then class dependency. Required scalar dependencies need a factory or default.
+Create the Post model/table first. This example assumes public posts; private data requires explicit authorization and owner-scoped queries. Route model binding is not automatic. Constructor services are auto-wired. Handler arguments resolve as current Request, named route parameter, default, then service dependency.
 
-## Validate before writing
+## Responses and failures
 
-Inside a controller with an injected NoteRepository and RequireAuth middleware:
-
-```php
-public function store(\Nova\Http\Request $request): \Nova\Http\Response
-{
-    $data = $request->validate([
-        'title' => 'required|string|max:100',
-        'body' => 'required|string|max:10000',
-    ]);
-    $id = $this->notes->create($data);
-    return \Nova\Http\Response::json(['note' => $this->notes->find($id)], 201);
-}
-```
-
-Import the Request, Response, and model classes when using this method inside a namespaced controller, or use their fully qualified names. Validation and model writable fields serve different purposes: validation checks input, while WRITABLE restricts which columns can be assigned. Never pass all request fields into a model, since tokens and other unrelated fields will be rejected.
-
-Apply StartSession followed by VerifyCsrfToken to browser write routes, including JSON routes that use cookies. Existing notes routes already have both. See [forms and views](/docs/forms) and [routing](/docs/routing).
-
-## Return responses and views
-
-Handlers may return a Response, an array for JSON, or a string for HTML. Records can be serialized inside Response::json; their HIDDEN fields are omitted.
+Handlers return Response, an array for JSON, or a string for HTML. Unhandled validation produces 422 with field errors. Throw HttpException for expected failures; production exceptions become safe 500 errors. See [routing](/docs/routing).
 
 ```php
-return \Nova\Http\Response::html(
-    $view->render('posts.index', ['posts' => $posts], 'layouts.app')
-);
+throw new Nova\Http\HttpException(403, 'Forbidden');
 ```
 
-Use the view's $e helper for values in HTML text and quoted attributes. Templates are not automatically escaped. Handle missing records with a 404, and use local redirects for browser form flows.
-
-The complete application example is app/Controllers/NoteController.php. It uses NoteRepository, which now delegates persistence to Nova Records while keeping the HTTP layer separate. Controllers can query models directly for small operations, but must explicitly enforce ownership. The notes repository scopes queries and supplies the trusted owner ID.
+Import the type or use its fully qualified name inside a namespace. Render PHP views with View::render and escape values through the template's $e helper. Apply sessions/CSRF to browser forms and authentication/authorization where needed. See [forms](/docs/forms) and [optional authentication](/docs/authentication).

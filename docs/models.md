@@ -1,167 +1,113 @@
 # Models and Nova Records
 
-Nova Records is NovaPHP's small ORM: a model represents a database row, and an immutable query describes how to find rows. It uses the existing PDO Connection and has no third-party packages. Connections are explicit, so separate applications or tests do not share global model state.
+Nova Records is NovaPHP's own ORM. It uses explicit database connections, writable-field allowlists, immutable queries, casts, optional timestamps, and explicit relations. The clean starter ships no application models or tables.
 
-## Create a model
+## Generate a model
 
 ```bash
 php nova make:model Post
 php nova make:model Person --table=people
 ```
 
-Models live in app/Models. The generator writes a TABLE constant and an empty WRITABLE list; add allowed fields before saving. It infers common table plurals such as posts and categories, but does not implement a full language inflector. Use --table for irregular names. The generator rejects invalid names, unknown options, and existing files. It does not create or run a migration: define your table separately with [migrations](/docs/migrations).
-
-## Define allowed fields
-
-The included Note model uses the existing notes table:
+The generator infers common plurals, rejects invalid names, and refuses existing files. It does not create a migration. Define your model's table and allowed fields:
 
 ```php
 namespace App\Models;
 
 use Nova\Database\Record;
 
-final class Note extends Record
+final class Post extends Record
 {
-    protected const TABLE = 'notes';
-    protected const WRITABLE = ['title', 'body', 'user_id'];
-    protected const CASTS = ['user_id' => 'int'];
-    protected const CREATED_AT = 'created_at';
-    protected const DATE_FORMAT = 'c';
+    protected const TABLE = 'posts';
+    protected const WRITABLE = ['title', 'body', 'published'];
+    protected const CASTS = ['published' => 'bool'];
 }
 ```
 
-TABLE is required. Models use an auto-increment integer primary key named id by default; override KEY for another integer auto-increment column name. Composite, UUID, string, and manually assigned primary keys are not supported in this version. Primary keys and automatic timestamp fields cannot be mass-assigned, even if listed in WRITABLE.
+TABLE is required. The primary key defaults to an auto-increment integer id; KEY can name another integer auto-increment column. Composite, UUID, string, and manually assigned keys are not supported. Create the table through a [migration](/docs/migrations) before querying.
 
-## Ownership with authentication
-
-The application now protects notes through an authenticated, ownership-scoped NoteRepository. Prefer injecting that repository for HTTP-facing note operations. Nova Records itself does not apply a user scope automatically. Every direct query for private data needs an explicit owner condition, and owner IDs must come from Auth rather than request input. See [authentication and ownership](/docs/authentication).
-
-## Query records
-
-Inject Nova\Database\Connection into your controller or repository, then choose the model:
+## Find records
 
 ```php
-use App\Models\Note;
+use App\Models\Post;
 
-$ownerId = $auth->requireUser()['id'];
-$notes = Note::using($database)
-    ->where('user_id', $ownerId)
-    ->where('title', 'LIKE', '%Nova%')
-    ->orderBy('id', 'desc')
-    ->take(20)
-    ->skip(0)
-    ->all();
-
-$note = Note::using($database)->where('user_id', $ownerId)->find(1);
-$first = Note::using($database)->where('user_id', $ownerId)->where('title', 'Welcome')->first();
-$total = Note::using($database)->where('user_id', $ownerId)->count();
+$query = Post::using($database);
+$posts = $query->where('published', true)->orderBy('id', 'desc')->take(20)->all();
+$post = $query->find(1);
+$first = $query->where('title', 'LIKE', '%Nova%')->first();
+$total = $query->count();
 ```
 
-all returns an array of model objects. first and find return a model or null. count counts filtered rows and ignores sorting and pagination. Unbounded all loads all matching rows, so use take for lists. take accepts 1 through 10000; skip accepts non-negative offsets. Use a deterministic order, normally a unique key, when paginating.
-
-Supported comparisons are =, !=, <>, <, <=, >, >=, LIKE, and NOT LIKE. Two arguments to where mean equality. Chained conditions are AND conditions. There are no raw conditions or OR groups yet.
+all returns an array of model objects; first/find return a model or null. Each filter returns a new query, leaving the original reusable. where accepts equality with two arguments, or an explicit =, !=, <>, <, <=, >, >=, LIKE, or NOT LIKE operator. Conditions are combined with AND. Identifiers/operators are validated and values are bound separately from SQL.
 
 ```php
-$query = Note::using($database)->where('user_id', $auth->requireUser()['id']);
 $selected = $query->whereIn('id', [1, 2, 3])->all();
-$missingBody = $query->whereNull('body')->all();
-$presentBody = $query->where('body', '!=', null)->all();
+$missing = $query->whereNull('body')->all();
+$present = $query->where('body', '!=', null)->all();
 ```
 
-Queries are immutable: filtering $query does not change the original query. An empty whereIn set matches nothing. Null equality produces IS NULL; null inequality produces IS NOT NULL. IN lists follow database null semantics; use whereNull explicitly for null values. Filters use database values; casts do not transform query bindings. Identifiers and sort directions are validated, while values are parameterized. Choose fields and operators in trusted code rather than exposing an unrestricted query interface to request input.
+An empty whereIn set matches nothing. Null equality/inequality use IS NULL/IS NOT NULL. Use whereNull explicitly for null matches in sets. Query bindings use database values; attribute casts do not transform query arguments. There are no OR groups, joins, or raw conditions in this version.
 
-## Create, change, and delete
+## Pagination
 
 ```php
-$note = Note::using($database)->create([
-    'user_id' => $auth->requireUser()['id'], // Trusted server-side owner.
-    'title' => 'Hello NovaPHP',
-    'body' => 'My first record.',
-]);
-
-$note->title = 'Updated title';
-$note->save();
-
-$note->fill(['title' => 'Another title', 'body' => 'Changed'])->save();
-$array = $note->toArray();
-$note->refresh();
-$deleted = $note->delete();
+$page = $query->where('published', true)->orderBy('id', 'desc')->paginate(perPage: 20, page: 2);
+return Nova\Http\Response::json($page);
 ```
 
-create returns a saved model. save inserts a new model or updates only changed fields on an existing one, then reloads database values. An unchanged save is a no-op. You can also construct new Note($database), fill it, and call save. Query filters on a query used for create do not become attributes or constrain the inserted record; use a fresh using query for clarity.
+Page contains items, total, perPage, and currentPage. JSON returns data plus meta with total, per_page, current_page, last_page, from, and to. Empty pages have null from/to. Query pagination uses a primary-key order unless another order is supplied. It runs a count plus a row query, not an atomic snapshot; concurrent writes may affect totals. Build page links with [named routes](/docs/routing). take/skip remain available, with a 10000-row size limit. count ignores ordering and pagination.
 
-fill and property assignment reject unlisted fields instead of silently dropping them. A failed fill leaves its attributes unchanged. Validate request data before fill or create; the model allowlist does not replace validation, authorization, or database constraints.
-
-delete returns true when a row was removed and marks the object deleted. Saving or deleting that object again throws. refresh and dirty saves detect a missing database row; an unchanged save does not check for external deletion. Dirty writes preserve unrelated column updates but do not provide optimistic locking for concurrent edits to the same field.
-
-## Casts and hidden attributes
-
-For a model whose table has these columns, configure:
+## Create, update, delete
 
 ```php
-protected const WRITABLE = ['title', 'published', 'views', 'rating', 'settings', 'secret'];
-protected const CASTS = [
-    'published' => 'bool',
-    'views' => 'int',
-    'rating' => 'float',
-    'settings' => 'json',
-];
+$post = Post::using($database)->create(['title' => 'Hello', 'body' => 'A post', 'published' => false]);
+$post->title = 'Changed';
+$post->save();
+$post->fill(['body' => 'New body'])->save();
+$array = $post->toArray();
+$post->refresh();
+$post->delete();
+```
+
+create returns a saved model; save inserts new records or updates changed fields and reloads values. An unchanged save is a no-op. fill rejects fields outside WRITABLE and leaves attributes unchanged on failure. Query filters do not become create attributes. Validate input separately. Primary keys and automatic timestamps are not writable. Deleted objects cannot be saved again.
+
+Dirty writes preserve unrelated columns but are not optimistic locking for edits to the same field. refresh/dirty saves detect missing rows; unchanged saves do not check deletion. Transactions use the same Connection; rollback restores the database, not existing PHP objects. Discard or reload objects after rollback.
+
+## Casts, hidden data, and timestamps
+
+```php
+protected const CASTS = ['published' => 'bool', 'views' => 'int', 'rating' => 'float', 'settings' => 'json'];
 protected const HIDDEN = ['secret'];
-```
-
-Supported casts are int, float, bool, string, and json. Null stays null. JSON casts accept PHP arrays and store JSON text; read them back as arrays. Replace the whole array through assignment or fill when changing a JSON field. Integer casts reject invalid integers; boolean casts accept true/false, 0/1, and the strings 0/1. Float casts use ordinary floating-point arithmetic and are unsuitable for exact money calculations. SQL decimal precision does not make PHP floats exact.
-
-The primary key is read as an integer by default. HIDDEN removes fields from toArray and JSON serialization, but they remain accessible on the model. It is an output filter, not encryption or authorization. Unknown casts fail explicitly.
-
-## Timestamps
-
-Automatic timestamps are opt-in:
-
-```php
 protected const CREATED_AT = 'created_at';
 protected const UPDATED_AT = 'updated_at';
-protected const DATE_FORMAT = 'Y-m-d H:i:s';
 ```
 
-Create the corresponding columns in a migration. The default date format is UTC YYYY-MM-DD HH:MM:SS, suitable for MySQL DATETIME. The existing Note model retains its original ISO 8601 string format because its created_at column is VARCHAR. No timestamp columns are assumed when the constants are null.
+Casts are int, float, bool, string, and json; null remains null. JSON accepts arrays and stores JSON text. Replace the whole array when editing. Boolean inputs are true/false, 0/1, or strings 0/1. Floats are unsuitable for exact money arithmetic. Hidden fields are omitted from toArray/JSON but remain accessible; hiding is not encryption or authorization.
+
+Timestamps are opt-in and need matching columns. Default DATE_FORMAT is UTC Y-m-d H:i:s; override it if your schema uses a different representation. The starter assumes no timestamp columns.
 
 ## Relations
 
-For tables posts and comments with a post_id column on comments, add methods to your models:
+For application models Post and Comment, with comments.post_id:
 
 ```php
-// In Post:
+// Post method:
 public function comments(): \Nova\Database\RecordQuery
 {
     return $this->hasMany(Comment::class, 'post_id');
 }
 
-// In Comment:
+// Comment method:
 public function post(): ?\Nova\Database\Record
 {
     return $this->belongsTo(Post::class, 'post_id');
 }
 ```
 
-Import the Record and RecordQuery types or use fully qualified names inside a namespace. Related model names must resolve to Record subclasses. hasMany returns a query that can be filtered and sorted; belongsTo returns a related model or null. Calls use the parent's connection. hasMany requires a saved record. A null foreign key yields null for belongsTo. Pass an optional third argument to belongsTo to use a different owner column.
+hasMany requires a saved record and returns a filterable query. belongsTo returns a model or null and accepts an optional owner-column argument. Calls use the parent's connection. Relations are explicit, uncached queries; there is no eager loading, automatic foreign-key assignment, or cascading save. Declare database foreign keys separately. Calling relation methods for every row can produce N+1 queries.
 
-```php
-$comments = $post->comments()->orderBy('id', 'desc')->take(10)->all();
-$owner = $comment->post();
-```
+## Authorization and limits
 
-Relations are explicit method calls and perform queries when called. They are not automatically cached or eager-loaded. Calling them for each row can produce N+1 queries. Foreign-key columns, database constraints, and any desired cascade behavior must be defined separately in migrations. Saving a relation does not automatically assign foreign keys or cascade writes.
+Models do not automatically scope queries to a logged-in user. Applications must authorize records and take owner IDs from trusted server context, not request fields. See [optional authentication](/docs/authentication).
 
-## Transactions, raw SQL, and limits
-
-```php
-$ownerId = $auth->requireUser()['id'];
-$database->transaction(function (Nova\Database\Connection $database) use ($ownerId) {
-    Note::using($database)->create(['title' => 'One', 'body' => 'First', 'user_id' => $ownerId]);
-    Note::using($database)->create(['title' => 'Two', 'body' => 'Second', 'user_id' => $ownerId]);
-});
-```
-
-Use the same connection for model operations and the transaction. A rollback restores the database, not existing PHP objects; discard or reload those objects after rollback. Nested transactions remain unsupported. Raw SQL through Connection remains available for operations outside the ORM.
-
-This version supports row persistence, basic immutable queries, casts, timestamps, serialization, and explicit relations. Eager loading, joins, query scopes, bulk writes, soft deletes, events, collections, and automatic route model binding are future work. SQLite is tested end-to-end; the MySQL path is implemented but has not been verified against a live MySQL server.
+Soft deletes, eager loading, events, scopes, bulk writes, collections, and route model binding remain future work. Raw Connection SQL remains available. SQLite is locally tested; MySQL has a dedicated CI test, which must pass before claiming MySQL verification.

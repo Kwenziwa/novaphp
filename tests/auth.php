@@ -8,14 +8,14 @@ use Nova\Database\{Connection, Migrator};
 use Nova\Http\Request;
 use Nova\Session\Session;
 use Nova\Validation\ValidationException;
-use App\Models\User;
-use App\Repositories\NoteRepository;
+use Tests\Fixtures\Demo\Models\User;
+use Tests\Fixtures\Demo\Repositories\NoteRepository;
 
 $authDb = new Connection(['driver' => 'sqlite', 'database' => ':memory:']);
-$firstMigration = require dirname(__DIR__) . '/database/migrations/2026_10_25_000001_create_notes.php';
+$firstMigration = require __DIR__ . '/Fixtures/Demo/database/migrations/2026_10_25_000001_create_notes.php';
 $firstMigration->up($authDb);
 $authDb->execute('INSERT INTO notes (title, body, created_at) VALUES (?, ?, ?)', ['Legacy', 'Unowned', gmdate('c')]);
-$ownershipMigration = require dirname(__DIR__) . '/database/migrations/2026_10_25_000002_add_auth_and_note_ownership.php';
+$ownershipMigration = require __DIR__ . '/Fixtures/Demo/database/migrations/2026_10_25_000002_add_auth_and_note_ownership.php';
 $ownershipMigration->up($authDb);
 check($authDb->first('SELECT user_id FROM notes WHERE id = 1')['user_id'] === null, 'ownership migration preserves legacy notes without assigning an owner');
 $ownershipMigration->down($authDb);
@@ -28,7 +28,7 @@ $aliceSession->start();
 $aliceSession->put('previous-user-data', 'must disappear');
 $beforeToken = $aliceSession->token();
 $limiter = new AttemptLimiter($authDb);
-$aliceAuth = new Auth($authDb, $aliceSession, $authConfig, $limiter);
+$aliceAuth = new Auth(new \Nova\Auth\DatabaseUserProvider($authDb, $authConfig), $aliceSession, $authConfig, $limiter);
 $alice = $aliceAuth->register('Alice', ' ALICE@EXAMPLE.TEST ', 'an original alice passphrase', 'alice-test');
 $row = $authDb->first('SELECT * FROM users WHERE id = ?', [$alice['id']]);
 check($alice['email'] === 'alice@example.test' && !isset($alice['password_hash']), 'registration normalizes email and returns only safe user fields');
@@ -45,7 +45,7 @@ foreach (['short', str_repeat('x', 73), "long enough password\0invalid"] as $ind
 
 $bobSession = new Session(native: false);
 $bobSession->start();
-$bobAuth = new Auth($authDb, $bobSession, $authConfig, new AttemptLimiter($authDb));
+$bobAuth = new Auth(new \Nova\Auth\DatabaseUserProvider($authDb, $authConfig), $bobSession, $authConfig, new AttemptLimiter($authDb));
 $bob = $bobAuth->register('Bob', 'bob@example.test', 'a separate bob passphrase', 'bob-test');
 $aliceNotes = new NoteRepository($authDb, $aliceAuth);
 $bobNotes = new NoteRepository($authDb, $bobAuth);
@@ -90,7 +90,7 @@ $authDb->execute('UPDATE auth_attempts SET window_started = ? WHERE key_hash = ?
 $limiter->consume(['unit-limit' => 2]);
 check((int) $authDb->first('SELECT attempts FROM auth_attempts WHERE key_hash = ?', [hash('sha256', 'unit-limit')])['attempts'] === 1, 'throttle window resets after expiry');
 
-$authApp = require dirname(__DIR__) . '/bootstrap/app.php';
+$authApp = require __DIR__ . '/Fixtures/Demo/bootstrap.php';
 $authApp->container->instance(Connection::class, $authDb);
 $webSession = new Session(native: false);
 $authApp->container->instance(Session::class, $webSession);

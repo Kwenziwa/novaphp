@@ -1,47 +1,37 @@
 # Getting started
 
-NovaPHP is an independent, educational PHP framework. It uses small, explicit services and has no third-party runtime packages. It is in early development and is not recommended for production use.
+NovaPHP is a small, independent PHP 8.2+ framework. The starter is intentionally application-neutral: it has a welcome page, browser documentation, and /api/health, but no account, notes, or contact application and no required application tables.
 
-## Requirements
-
-- PHP 8.2 or newer
-- PDO and pdo_sqlite for the database and notes demo
-- pdo_mysql when using MySQL
-
-Non-database routes do not open a database connection. Composer is optional: the built-in autoloader supports App and Nova namespaces.
-
-## Start the application
+## Choose a project
 
 ```bash
+php nova new my-app
+```
+
+Select Empty or Vue, React, Svelte, Solid, Preact, or Alpine. Read [project creation](/docs/project-creation) for the blueprint structure and non-interactive options. Frontend projects need Node 22.12+ or 24+ for development/builds; empty projects do not.
+
+## Run PHP
+
+```bash
+cd my-app
 php nova serve
 ```
 
-Open [the welcome page](http://127.0.0.1:8000) or [the documentation](/docs). This guide is rendered from Markdown files in the docs directory, so you can edit the files and reload your browser.
+Open http://127.0.0.1:8000 and /docs. Composer is optional: the built-in autoloader maps App to app and Nova to src. PDO and a driver extension are needed only for database features.
 
-## Try the included features
+## Add your application
 
-- [Controllers](/docs/controllers): route handlers, injection, validation, and responses.
-- [Authentication](/docs/authentication): accounts, sessions, protected routes, and note ownership.
-- [Models](/docs/models): Nova Records queries, persistence, casts, and relations.
-- [Migrations](/docs/migrations): field maps and raw SQL, with reversible changes.
-- [Database](/docs/database): SQLite, MySQL configuration, and transactions.
-- [Routing and middleware](/docs/routing): requests, controllers, and grouped routes.
-- [Forms and views](/docs/forms): sessions, validation, CSRF, and HTML escaping.
+- [Controllers](/docs/controllers) handle requests and responses.
+- [Models](/docs/models) query and persist records with Nova Records.
+- [Migrations](/docs/migrations) define your tables using field maps or SQL.
+- [Routing](/docs/routing) groups routes, middleware, and named URLs.
+- [Authentication](/docs/authentication) explains optional identity providers and application-owned account flows.
+- [Extension points](/docs/extensions) shows providers, middleware, and adapters.
 
-To try the shared notes demo, initialize its database and visit /notes:
-
-```bash
-php nova migrate
-php nova serve
-```
-
-The notes demo requires registration or login and shows only the current user’s notes. Existing unowned notes remain hidden. The /contact form demonstrates validation and flash messages without sending or saving messages.
-
-## Run the tests
+## Test
 
 ```bash
 php tests/run.php
-php tests/http.php
 ```
 
-The HTTP suite starts a temporary local server and uses isolated SQLite and session storage. See [the project reference](/docs/reference) for command descriptions and limits.
+Generated projects have an independent smoke test. The NovaPHP source repository additionally has regression, native HTTP/session, fixture-authentication, frontend-build, and MySQL tests. See [the reference](/docs/reference).

@@ -4,7 +4,7 @@
 declare(strict_types=1);
 
 $root = dirname(__DIR__);
-require_once $root . '/bootstrap/autoload.php';
+require_once __DIR__ . '/bootstrap.php';
 $socket = stream_socket_server('tcp://127.0.0.1:0', $errno, $error);
 if ($socket === false) { throw new RuntimeException($error); }
 $address = stream_socket_get_name($socket, false);
@@ -14,9 +14,9 @@ mkdir($directory, 0700);
 $log = $directory . '/server.log';
 $testDatabase = $directory . '/database.sqlite';
 (new \Nova\Database\Migrator(new \Nova\Database\Connection(['driver' => 'sqlite', 'database' => $testDatabase]),
-    $root . '/database/migrations'))->migrate();
+    __DIR__ . '/Fixtures/Demo/database/migrations'))->migrate();
 $process = proc_open([PHP_BINARY, '-d', 'session.save_path=' . $directory, '-S', $address,
-    '-t', $root . '/public', $root . '/public/router.php'],
+    '-t', $root . '/public', __DIR__ . '/Fixtures/http-router.php'],
     [0 => ['pipe', 'r'], 1 => ['file', $log, 'a'], 2 => ['file', $log, 'a']], $pipes, $root, array_replace(getenv(), ['DB_CONNECTION' => 'sqlite', 'DB_DATABASE' => $testDatabase]));
 if (!is_resource($process)) { throw new RuntimeException('Cannot start HTTP test server.'); }
 fclose($pipes[0]);

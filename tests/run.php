@@ -2,7 +2,8 @@
 
 declare(strict_types=1);
 
-$app = require dirname(__DIR__) . '/bootstrap/app.php';
+require __DIR__ . '/bootstrap.php';
+$app = require __DIR__ . '/Fixtures/Demo/bootstrap.php';
 use Nova\Http\Request;
 
 $cases = [
@@ -28,4 +29,6 @@ require __DIR__ . "/schema.php";
 require __DIR__ . "/docs.php";
 require __DIR__ . "/records.php";
 require __DIR__ . "/auth.php";
+require __DIR__ . "/foundation.php";
+require __DIR__ . "/projects.php";
 echo "All tests passed.\n";

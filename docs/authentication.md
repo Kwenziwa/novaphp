@@ -1,27 +1,59 @@
-# Authentication and ownership
+# Optional authentication
 
-NovaPHP includes account registration, password login, POST logout, protected routes, and per-user notes. Apply the new migration before using account features:
+Authentication is a reusable framework module, not an installed account application. The clean starter has no login/register routes, users model, account views, or account migrations. Frontend selection does not enable authentication automatically.
 
-```bash
-php nova migrate
-php nova serve
-```
+## Choose your identity provider
 
-Open /register to create an account, /login to sign in, /account to view the current account, and /notes to manage your own notes. No default account or password is created. The documentation, contact form, and existing stateless API routes remain public.
-
-## What changes for existing notes
-
-The additive migration creates users and auth_attempts tables and adds a nullable user_id foreign key and owner index to notes. Existing notes are preserved with a null owner and are hidden from normal user queries. They are not given to the first registered user, and there is no public claim endpoint.
-
-If legacy notes need an owner, an administrator must verify the correct account and assign individual notes deliberately through trusted database code. For example, with verified IDs:
+Nova\Auth\UserProvider defines four methods:
 
 ```php
-$database->execute('UPDATE notes SET user_id = ? WHERE id = ? AND user_id IS NULL', [$verifiedUserId, $verifiedNoteId]);
+interface UserProvider
+{
+    public function findById(int $id): ?array;
+    public function findByEmail(string $email): ?array;
+    public function create(string $name, string $email, string $passwordHash): array;
+    public function rehash(int $id, string $previousHash, string $newHash): void;
+}
 ```
 
-Do not use request input for an administrative ownership assignment. Rolling back the authentication migration removes user accounts, throttle counters, the foreign key, and ownership column while preserving note contents; use backups and review migration down methods before rollback. SQLite rollback requires SQLite 3.35+ for column removal. MySQL DDL retains the existing implicit-commit limitations.
+Providers return canonical id, name, email, and password_hash fields. Password hashing and verification remain in Auth; the provider stores hashes and maps your application identity. Auth returns only id/name/email to callers. Custom adapters may use a different schema or identity store. Account keys must currently be positive integers. A provider should translate duplicate-account creation into ValidationException rather than exposing storage details.
 
-## Protect a route
+Set auth.provider to your implementation or bind UserProvider in an application provider. Leaving it null produces an explicit configuration error when authentication is resolved; ordinary starter routes do not resolve it.
+
+## Optional SQL adapter
+
+DatabaseUserProvider supports table/column mappings in config/auth.php:
+
+```php
+'provider' => Nova\Auth\DatabaseUserProvider::class,
+'login_path' => '/login',
+'attempts_table' => 'auth_attempts',
+'storage' => [
+    'table' => 'members',
+    'id' => 'member_id',
+    'name' => 'display_name',
+    'email' => 'email',
+    'password_hash' => 'password_hash',
+    'created_at' => 'created_at', // null if your schema has no timestamp column
+],
+```
+
+Create the corresponding application-owned schema through migrations. Names must be simple SQL identifiers. The identity table needs an auto-increment integer key, display name, unique normalized email, password hash column of at least 255 characters, and a timestamp if configured. The registration service trims/lowercases emails. The adapter does not create tables automatically.
+
+The persistent limiter separately requires a table matching auth.attempts_table:
+
+```php
+$database->schema()->create('auth_attempts', [
+    'key_hash' => Nova\Database\Field::string(64)->unique(),
+    'attempts' => Nova\Database\Field::integer(),
+    'window_started' => Nova\Database\Field::integer(),
+]);
+$database->schema()->index('auth_attempts', ['window_started']);
+```
+
+This limiter remains SQL-backed even if the identity provider uses another store. It is not provisioned until an application chooses to use authentication.
+
+## Protect routes and build your account flow
 
 ```php
 use Nova\Http\Middleware\{StartSession, VerifyCsrfToken, RequireAuth};
@@ -32,63 +64,34 @@ $router->group('/private', [StartSession::class, VerifyCsrfToken::class, Require
     });
 ```
 
-Session middleware must run first; CSRF verification protects cookie-authenticated write requests; RequireAuth then checks the current account and expiry. Browser guests are redirected to /login. JSON guests receive 401. Protected responses use Cache-Control: no-store. RequireAuth protects login status, not permission to every record—ownership checks are separate.
+Session middleware runs first. RequireAuth redirects browser guests to auth.login_path and returns JSON 401 for JSON guests. Your application must implement that login route. Cookie-authenticated write routes also need CSRF middleware. Login and registration routes need sessions and CSRF but cannot require an already authenticated account.
 
-## Access the current user
-
-Inject Nova\Auth\Auth into controllers or repositories:
+Inject Nova\Auth\Auth into application controllers:
 
 ```php
-$user = $auth->user();        // id, name, email, or null
-$user = $auth->requireUser(); // throws if unauthenticated; use behind RequireAuth
+$user = $auth->user(); // safe user fields or null
+$user = $auth->requireUser();
+$created = $auth->register($name, $email, $password, $request->ip());
+$success = $auth->attempt($email, $password, $request->ip());
+$auth->logout();
 ```
 
-The session stores the user ID and issue/activity timestamps. Each check reloads the safe account fields; deleted accounts lose access. Password hashes are never returned by these methods. App\Models\User hides password_hash in arrays and JSON and does not allow it in WRITABLE. Registration and password verification go through Auth rather than a generic User model create.
+Controllers validate fields and password confirmation, return their own forms/JSON, and handle ValidationException and RateLimitException. Do not echo, flash, or repopulate passwords. Auth registration signs the new user in. Login/registration clear session contents and rotate the ID and CSRF token. Logout invalidates the session; expose it only as a CSRF-protected POST action. JSON flows should return a new session token after authentication state changes.
 
-Successful registration signs the user in. Login and registration clear the previous session contents, regenerate its ID, and rotate the CSRF token. Logout clears all session contents, regenerates its ID, and leaves a fresh anonymous session. Logout requires POST plus a valid CSRF token; there is no GET logout route.
+## Passwords, expiry, and throttling
 
-## Passwords and validation
+Passwords require at least 15 Unicode characters and no more than 72 UTF-8 bytes, without null bytes. PHP bcrypt cost 12 is used, with a dummy verification for unknown accounts and hash upgrades on successful login. The byte bound avoids silent bcrypt truncation. Auth password parameters use SensitiveParameter. See [PHP hashing](https://www.php.net/manual/en/function.password-hash.php) and [OWASP authentication guidance](https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html).
 
-Registration requires a name, a valid email, a password, and matching password_confirmation. Email is trimmed and lowercased and is unique at the database level. Passwords require at least 15 Unicode characters and at most 72 UTF-8 bytes, without null bytes. There are no composition rules. The byte maximum avoids bcrypt's silent truncation; sufficiently long multibyte passphrases may reach that maximum with fewer than 72 characters.
+AUTH_IDLE_SECONDS defaults to 1800 and AUTH_ABSOLUTE_SECONDS to 43200. Values must be positive. Authentication checks refresh idle activity without extending absolute lifetime. Invalid state and missing accounts invalidate sessions. Enable SESSION_SECURE on HTTPS deployments; arbitrary forwarded client-IP headers are not trusted.
 
-Passwords are hashed using PHP bcrypt at cost 12 and verified with password_verify. Successful login upgrades hashes with a lower cost. Unknown emails use a dummy hash verification and receive the same credential error as incorrect passwords. Password fields are not repopulated or flashed, and Auth password parameters use PHP's SensitiveParameter attribute. Duplicate registration returns a generic registration failure for the email field. This does not make registration an email-availability privacy guarantee.
+The SQL limiter permits five login attempts per normalized email, thirty per direct client IP, and ten valid registration attempts per IP in a 15-minute window. It persists counters as hashed identities. Successful login clears the account counter, not the IP counter. Handle RateLimitException as 429 with retryAfter. Shared IPs and targeted account throttling have usability tradeoffs. Infrastructure limits and account recovery are application responsibilities.
 
-See the [PHP password hashing documentation](https://www.php.net/manual/en/function.password-hash.php) and [OWASP authentication guidance](https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html).
+## Authorization belongs to the application
 
-## JSON clients and CSRF
+Authentication does not authorize access to every record. Models have no automatic current-user scopes. Scope private queries to the authenticated owner and reject owner IDs from request input. Define foreign keys, deletion rules, and roles/policies in the application.
 
-GET /csrf-token starts an anonymous session and returns csrf_token. Keep the session cookie, and submit that token as a body _token or X-CSRF-Token header. Do not put credentials or CSRF tokens in query strings.
+## Existing local demo data
 
-```text
-GET  /csrf-token
-POST /register   name, email, password, password_confirmation, _token
-POST /login      email, password, _token
-GET  /account    Accept: application/json
-POST /logout     _token
-```
+Removing public demos does not delete or migrate your local database. Existing notes/accounts remain on disk, but the starter no longer exposes them and generated projects never copy them. The source repository retains the demo exclusively under tests/Fixtures/Demo to test sessions, authentication, ownership, and migrations against isolated databases. Those test fixtures are not a supported scaffold installer.
 
-Use Content-Type: application/json and Accept: application/json for JSON requests. Successful registration returns 201; successful login returns 200. Both return safe user fields and a new csrf_token. Account JSON also includes the current token. JSON logout returns a new anonymous token. Always replace your token after successful registration, login, or logout. Pre-login form tokens become invalid after authentication; reload forms opened in other tabs when necessary.
-
-Validation returns 422, incorrect credentials 401, missing/invalid CSRF 419, and throttled attempts 429 with a Retry-After header. Passwords are accepted from the body only. Failed HTML forms show escaped errors and retain only bounded name/email values.
-
-## Session expiry and login throttling
-
-```dotenv
-AUTH_IDLE_SECONDS=1800
-AUTH_ABSOLUTE_SECONDS=43200
-SESSION_SECURE=true
-```
-
-Authentication expires after 30 minutes without an authentication check or 12 hours after login by default. Activity refreshes the idle timer but never extends the absolute lifetime. Expired, malformed, or deleted-user sessions are invalidated. Expiry settings must be positive; there is no remember-me feature. SESSION_SECURE=true is required for cookies on HTTPS deployments; keep false only for local HTTP development. Configure your web server and proxy for HTTPS; arbitrary forwarded IP/HTTPS headers are not trusted.
-
-A persistent database limiter allows five login attempts per normalized email and thirty per direct client IP in a 15-minute window. Successful login clears the account counter, while the IP counter remains. Registration allows ten valid registration attempts per IP in the same window. Counters survive cookie changes and process restarts. Identities are stored as SHA-256 hashes, not raw emails/IPs. Expired counters are pruned during new attempts. Shared IPs can share limits, and targeted account throttling can affect a legitimate user's login; tune infrastructure and recovery flows before a production deployment. Retry-After is a conservative 900 seconds.
-
-## Ownership is enforced by the repository
-
-All note list/find/update/delete operations in NoteRepository require an authenticated account and scope lookups to user_id. Creation uses the authenticated ID rather than a submitted owner. Updates accept title/body only. Missing, unowned, and other users' notes return 404 through the controller. The user ID and foreign-key cascade prevent ordinary orphan creation and remove owned notes if a user is deleted through trusted administrative database code.
-
-Nova Records itself is a low-level ORM and does not automatically apply user scopes. Direct Note::using queries can access every row. For web-facing note operations, inject NoteRepository, or explicitly scope and authorize every direct model query. Authentication middleware alone is not record authorization. There is no general roles/permissions policy engine yet.
-
-## Current limits
-
-This is an educational implementation, not a complete production identity system. Email verification, password reset/recovery, MFA, breached-password screening, account-management UI, cross-device session revocation, and general roles/policies are not implemented. A deployed application also needs operational monitoring, HTTPS, backups, appropriate server limits, and a reviewed security model. SQLite authentication and cross-user HTTP flows are tested; MySQL remains unverified against a live server.
+Email recovery/verification, MFA, breached-password checks, cross-device session revocation, and a general policy engine remain future work. An optional account scaffold can be added later without hard-coding it into every project.

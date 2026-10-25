@@ -85,7 +85,7 @@ $application->router->post('/validate', fn (Request $r) => $r->validate(['email'
 check($application->handle(new Request('POST', '/validate', headers: ['accept' => 'application/json']))->status === 422, 'JSON validation response');
 check(str_contains($application->handle(new Request('POST', '/validate'))->body, 'Validation failed'), 'HTML validation response');
 
-$view = new View(dirname(__DIR__) . '/resources/views');
+$view = new View(__DIR__ . '/Fixtures/Demo/resources/views');
 $html = $view->render('contact', ['title' => '<script>x</script>', 'token' => 'token', 'notice' => '<img>', 'errors' => [], 'old' => ['name' => '" onfocus="alert(1)']], 'layouts.app');
 check(str_contains($html, '&lt;script&gt;') && !str_contains($html, '<script>') && str_contains($html, '&quot; onfocus=&quot;'), 'view escapes text and attribute values');
 fails(fn () => $view->render('../config/app'), 'Invalid view name');
@@ -96,7 +96,7 @@ foreach (['https://example.com', '//example.com', "/\\example.com", "/ok\r\nInje
     catch (InvalidArgumentException) { check(true, 'unsafe redirect rejected'); }
 }
 
-$demo = require dirname(__DIR__) . '/bootstrap/app.php';
+$demo = require __DIR__ . '/Fixtures/Demo/bootstrap.php';
 $demo->container->instance(Session::class, new Session(native: false));
 $form = $demo->handle(new Request('GET', '/contact'));
 preg_match('/name="_token" value="([a-f0-9]+)"/', $form->body, $match);

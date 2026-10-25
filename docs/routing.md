@@ -1,6 +1,6 @@
 # Routing and middleware
 
-Define browser routes in routes/web.php and JSON API routes in routes/api.php. Both files receive the application router.
+Define browser routes in routes/web.php and JSON API routes in routes/api.php. Both files receive the application router. The starter contains no CRUD or account routes.
 
 ## Basic routes
 
@@ -40,3 +40,16 @@ $router->group('/account', [StartSession::class, VerifyCsrfToken::class],
 ```
 
 Import application middleware and `Nova\Http\Middleware\StartSession` / `VerifyCsrfToken` as needed. Middleware enters in this order: global, outer group, inner group, route. Responses unwind in reverse order. Use `try/finally` for cleanup when downstream code may throw. Nested prefixes concatenate; group state is restored even if registration throws. The optional third argument on HTTP route methods is a middleware array; `add()` accepts it as the fourth argument. `routes()` now includes that middleware array as each route's fourth element. Existing three-element destructuring continues to work. Literal route characters such as `.` are matched literally.
+
+## Named routes and URL generation
+
+```php
+$router->get('/posts/{id}', [PostController::class, 'show'], name: 'posts.show');
+$url = $router->url('posts.show', ['id' => 42], ['page' => 2]);
+```
+
+Names must be unique. Group prefixes are included in generated URLs. Parameters are required, encoded as path segments, and extra parameters are rejected. Query values are URL encoded. URLs are local paths; this helper does not generate signed or absolute URLs.
+
+## Structured HTTP errors
+
+JSON requests receive an error object for routing failures and production exceptions. 405 responses retain Allow. Expected application failures can throw Nova\Http\HttpException with a 400–599 status and a public message. Unhandled validation retains its separate errors map. Debug traces are for private development only.

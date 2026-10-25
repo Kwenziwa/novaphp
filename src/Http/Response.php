@@ -28,6 +28,12 @@ final class Response
         return new self($text, $status, ['Content-Type' => 'text/plain; charset=UTF-8']);
     }
 
+    public static function error(Request $request, string $message, int $status, array $headers = []): self
+    {
+        $response = $request->expectsJson() ? self::json(['error' => $message], $status) : self::text($status . ' ' . $message, $status);
+        return new self($response->body, $status, [...$response->headers, ...$headers]);
+    }
+
     public static function redirect(string $path, int $status = 303): self
     {
         if (!str_starts_with($path, '/') || str_starts_with($path, '//')

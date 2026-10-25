@@ -11,6 +11,11 @@ $seconds = static function (string $name, int $default): int {
 };
 
 return [
+    // Optional: DatabaseUserProvider::class or your own UserProvider implementation.
+    'provider' => null,
+    'login_path' => '/login',
+    'attempts_table' => 'auth_attempts',
+    'storage' => ['table' => 'users', 'id' => 'id', 'name' => 'name', 'email' => 'email', 'password_hash' => 'password_hash', 'created_at' => 'created_at'],
     'idle_seconds' => $seconds('AUTH_IDLE_SECONDS', 1800),
     'absolute_seconds' => $seconds('AUTH_ABSOLUTE_SECONDS', 43200),
 ];

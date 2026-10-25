@@ -1,3 +1,7 @@
 /vendor/
 /.env
 /storage/logs/*.log
+
+.env
+.env.*
+!.env.example

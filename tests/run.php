@@ -21,4 +21,5 @@ foreach ($cases as [$method, $path, $expectedStatus, $expectedText]) {
     }
     echo "PASS {$method} {$path}\n";
 }
+require __DIR__ . "/phase2.php";
 echo "All tests passed.\n";

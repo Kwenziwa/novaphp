@@ -23,8 +23,30 @@ switch ($command) {
             printf("%-8s %s\n", $method, $path);
         }
         break;
+    case 'config:show':
+        $key = $argv[2] ?? null;
+        $value = $key === null ? $app->config->all() : $app->config->get($key);
+        echo json_encode($value, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR) . "\n";
+        break;
+    case 'make:controller':
+        $name = $argv[2] ?? '';
+        if (!preg_match('/^[A-Z][A-Za-z0-9_]*Controller$/D', $name)) {
+            fwrite(STDERR, "Use a simple class name such as PostController.\n");
+            exit(1);
+        }
+        $path = __DIR__ . '/app/Controllers/' . $name . '.php';
+        $file = @fopen($path, 'x');
+        if ($file === false) {
+            fwrite(STDERR, "Controller exists or cannot be created.\n");
+            exit(1);
+        }
+        $source = "<?php\n\ndeclare(strict_types=1);\n\nnamespace App\\Controllers;\n\nfinal class {$name}\n{\n    public function index(): string\n    {\n        return 'Hello from {$name}';\n    }\n}\n";
+        fwrite($file, $source);
+        fclose($file);
+        echo "Created app/Controllers/{$name}.php\n";
+        break;
     case 'help':
-        echo "NovaPHP CLI\n  php nova serve [127.0.0.1:8000]\n  php nova route:list\n";
+        echo "NovaPHP CLI\n  php nova serve [127.0.0.1:8000]\n  php nova route:list\n  php nova make:controller PostController\n  php nova config:show [app.debug]\n";
         break;
     default:
         fwrite(STDERR, "Unknown command: {$command}\n");

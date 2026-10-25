@@ -15,6 +15,8 @@ final class Router
 {
     private array $routes = [];
 
+    public function __construct(private readonly \Nova\Core\Container $container = new \Nova\Core\Container()) {}
+
     public function get(string $path, callable|array $handler): void { $this->add('GET', $path, $handler); }
     public function post(string $path, callable|array $handler): void { $this->add('POST', $path, $handler); }
     public function put(string $path, callable|array $handler): void { $this->add('PUT', $path, $handler); }
@@ -61,7 +63,7 @@ final class Router
     private function invoke(callable|array $handler, Request $request, array $params): mixed
     {
         if (is_array($handler) && is_string($handler[0])) {
-            $handler = [new $handler[0](), $handler[1]];
+            $handler = [$this->container->make($handler[0]), $handler[1]];
         }
         $reflection = is_array($handler)
             ? new ReflectionMethod($handler[0], $handler[1])
@@ -75,6 +77,8 @@ final class Router
                 $arguments[] = $params[$parameter->getName()];
             } elseif ($parameter->isDefaultValueAvailable()) {
                 $arguments[] = $parameter->getDefaultValue();
+            } elseif ($type instanceof ReflectionNamedType && !$type->isBuiltin()) {
+                $arguments[] = $this->container->make($type->getName());
             } else {
                 throw new RuntimeException('Cannot resolve handler parameter $' . $parameter->getName());
             }

@@ -1,296 +1,111 @@
-# 🚀 NovaPHP
+# NovaPHP — Phase 2
 
-**A modern, lightweight, open-source PHP framework built from scratch.**
+An independent educational PHP framework with no runtime dependencies beyond PHP 8.2+.
 
-NovaPHP is an independent PHP framework designed to simplify the development of modern web applications and RESTful APIs. Inspired by the simplicity and developer experience of modern PHP frameworks, NovaPHP focuses on clean architecture, flexibility, performance, and ease of use.
+🚧 NovaPHP is in early development and is not recommended for production use.
 
-Built with PHP 8.2+, NovaPHP aims to provide developers with the essential tools needed to build scalable PHP applications while maintaining a lightweight and understandable codebase.
-
-> [!WARNING]
-> 🚧 **NovaPHP is currently in early development and is not recommended for production use.**
->
-> This project is under active development. Features, APIs, and architecture may change as the framework evolves.
-
-## ✨ Features
-
-NovaPHP Phase 1 includes the following features:
-
-- **MVC Architecture:** Organize application logic using models, views, and controllers.
-- **Routing System:** Support for GET, POST, PUT, PATCH, and DELETE HTTP methods.
-- **Dynamic Routes:** Define routes with named URL parameters.
-- **HTTP Handling:** Parse incoming requests and return HTML, text, or JSON responses.
-- **REST API Support:** Build JSON-based API endpoints.
-- **Controllers:** Support class-based controllers and closure route handlers.
-- **Dependency Handling:** Automatically inject HTTP Request objects into route handlers.
-- **Autoloading:** PSR-4-style namespace autoloading with optional Composer integration.
-- **Error Handling:** Built-in 404, 405, and exception handling.
-- **Command-Line Interface:** Manage your application through the `nova` CLI.
-- **Testing:** Standalone automated tests.
-
-> **Note:** These are Phase 1 capabilities. Advanced features such as database models, middleware, and full dependency injection are planned for later releases.
-
-## 📋 Requirements
-
-- PHP 8.2 or higher
-- Composer (optional for Phase 1)
-- Git (recommended)
-
-No external runtime packages are required for Phase 1.
-
-## 📦 Installation
-
-### 1. Clone the repository
-
-```bash
-git clone https://github.com/Kwenziwa/novaphp.git
-
-cd novaphp
-```
-
-### 2. Configure autoloading (optional)
-
-NovaPHP includes a built-in PSR-4-style fallback autoloader, so Composer is not required to run Phase 1.
-
-If Composer is installed, generate the standard autoloader:
-
-```bash
-composer dump-autoload
-```
-
-### 3. Start the development server
+## Run
 
 ```bash
 php nova serve
 ```
 
-Open your browser and visit:
-
-**http://127.0.0.1:8000**
-
-Your NovaPHP application should now be running.
-
-## 🛠️ NovaPHP CLI
-
-NovaPHP comes with a lightweight command-line interface.
-
-### Start the development server
-
-```bash
-php nova serve
-```
-
-### List registered routes
+Visit http://127.0.0.1:8000. Composer is optional: a built-in PSR-4 fallback loads `Nova\` from `src/` and `App\` from `app/`. If you use Composer, run `composer dump-autoload`.
 
 ```bash
 php nova route:list
+php nova make:controller PostController
+php nova config:show app.name
+php tests/run.php
+curl http://127.0.0.1:8000/api/health
+curl -X POST http://127.0.0.1:8000/api/echo \
+  -H 'Content-Type: application/json' -d '{"message":"Hello"}'
 ```
 
-Additional CLI commands will be introduced in future releases.
-
-## 🌐 Routing
-
-NovaPHP supports multiple HTTP methods and dynamic URL parameters.
-
-Example:
+`make:controller` creates `app/Controllers/PostController.php` with an `index()` method. It accepts a simple PascalCase name ending in `Controller`, rejects paths, and refuses to overwrite an existing file. Add a route yourself:
 
 ```php
-use Nova\Routing\Router;
-
-return static function (Router $router): void {
-    $router->get('/', function () {
-        return 'Welcome to NovaPHP!';
-    });
-
-    $router->get('/hello/{name}', function ($name) {
-        return "Hello, {$name}!";
-    });
-};
+$router->get('/posts', [App\Controllers\PostController::class, 'index']);
 ```
 
-Visit `/hello/John` to receive:
+## Phase 2: dependency container
 
-```text
-Hello, John!
+The application exposes `$app->container`. Bind interfaces to classes or closure factories, share a singleton, or register an existing instance:
+
+```php
+$container = $app->container;
+$container->bind(Mailer::class, SmtpMailer::class);
+$container->singleton(Cache::class, fn ($container) => new MemoryCache());
+$container->instance('app.label', 'NovaPHP');
+$mailer = $container->make(Mailer::class);
 ```
 
-## 🔌 REST API
+Unbound concrete classes are resolved automatically through their constructors. Class and interface dependencies are recursively resolved; scalar parameters need a default or an explicit factory. Variadic constructor parameters receive no arguments. Union/intersection constructor parameters require a default or factory. Unbound interfaces, non-instantiable classes, and required unresolved parameters produce descriptive errors. Circular dependencies report their resolution chain. Failed resolutions clear the resolution stack so later resolutions can succeed.
 
-NovaPHP provides built-in support for JSON requests and responses.
+Bindings are transient; singletons resolve once per container. Rebinding clears an existing cached instance. `instance()` can hold any value, including `null`. The application, container, router, and config repository are registered as core instances.
 
-### Health check endpoint
+Controllers are constructed through the container. Handler arguments resolve in this order: the current `Request`, a named route parameter, a default value, then a class dependency. Existing closure handlers, routes, responses, and standalone `new Router()` usage continue to work.
+
+## Service providers and bootstrap
+
+`bootstrap/app.php` creates the application, registers every provider in `config/app.php`, boots providers, then loads the existing web and API routes. All configured providers register before any boot method runs. Registration and boot are idempotent; a provider registered after boot is registered and booted immediately.
+
+Extend `Nova\Core\ServiceProvider`. Use `$this->app->container` in `register()` for bindings and `boot()` for setup that depends on other registered services. The starter `App\Providers\AppServiceProvider` is already configured:
+
+```php
+namespace App\Providers;
+
+use Nova\Core\ServiceProvider;
+
+final class AppServiceProvider extends ServiceProvider
+{
+    public function register(): void
+    {
+        // $this->app->container->singleton(Mailer::class, SmtpMailer::class);
+    }
+
+    public function boot(): void
+    {
+        // All configured service bindings are now available.
+    }
+}
+```
+
+When constructing `Application` directly, call `register()` and `boot()` explicitly if providers are needed; the standard bootstrap handles this for HTTP and CLI.
+
+## Configuration and environment
+
+PHP files in `config/` must return arrays. Each filename becomes its top-level key. The repository supports dot notation, defaults, mutation, and complete inspection:
+
+```php
+$app->config->get('app.debug', false);
+$app->config->set('services.mail.host', 'localhost');
+$app->config->all();
+```
+
+Copy `.env.example` to `.env` if needed. `.env` is loaded before config files and is ignored by Git. Existing process environment, `$_ENV`, and `$_SERVER` values take precedence. The loader supports blank lines, comments, optional `export`, empty values, and single/double quoted literal values. Whitespace followed by `#` starts a comment in an unquoted value. Quotes do not support escape sequences. There is no variable interpolation, command substitution, or code evaluation. Malformed entries fail with a line number before any values from the file are applied. Missing `.env` files are allowed.
+
+Config files read environment values with `getenv()`. Keep parsing explicit: `app.debug` uses `FILTER_VALIDATE_BOOLEAN`, so `APP_DEBUG=false` stays false.
 
 ```bash
-curl http://127.0.0.1:8000/api/health
+php nova config:show             # all config
+php nova config:show app.debug   # one dot-notation key; missing keys print null
 ```
 
-### POST request example
+Config inspection prints the requested values without redaction; run it locally and avoid sharing output containing credentials.
 
-```bash
-curl -X POST http://127.0.0.1:8000/api/echo \
-  -H "Content-Type: application/json" \
-  -d '{"message":"Hello"}'
-```
+## Preserved Phase 1 features
 
-NovaPHP can parse JSON payloads and return structured JSON responses.
+- Optional Composer autoloading and built-in namespace fallback
+- Front controller and PHP development server router
+- Query, form, and JSON request parsing; HTML, text, and JSON responses
+- GET/POST/PUT/PATCH/DELETE routes with named parameters
+- Class controllers, closures, and automatic `Request` injection
+- 404, 405, and exception handling with a safe production error response
+- `serve`, `route:list`, and standalone tests
 
-## 🧪 Testing
+## Verification and limits
 
-NovaPHP includes standalone automated tests.
+`php tests/run.php` covers the original HTTP routes plus container lifetimes, auto-wiring, circular failures and recovery, config access, environment parsing and precedence, provider ordering, controller injection, and CLI generation/overwrite safeguards. No test framework is required.
 
-Run the test suite:
-
-```bash
-php tests/run.php
-```
-
-These tests help verify the functionality of core framework components.
-
-## 🏗️ Framework Architecture
-
-NovaPHP is being developed with a modular architecture to keep the framework organized and maintainable.
-
-```text
-novaphp/
-├── app/
-│   └── Controllers/
-├── bootstrap/
-├── config/
-├── public/
-├── resources/
-├── routes/
-│   ├── web.php
-│   └── api.php
-├── src/
-│   ├── Core/
-│   ├── Http/
-│   └── Routing/
-├── tests/
-├── composer.json
-└── nova
-```
-
-The framework separates application code from its internal components, allowing developers to extend functionality as NovaPHP evolves.
-
-## 🗺️ Development Roadmap
-
-NovaPHP is being developed in phases.
-
-### ✅ Phase 1: Core Foundation
-
-- [x] Framework bootstrap
-- [x] Namespace autoloading
-- [x] HTTP request and response handling
-- [x] Routing system
-- [x] Dynamic route parameters
-- [x] Controller support
-- [x] JSON API responses
-- [x] Exception and error handling
-- [x] Basic CLI
-- [x] Automated tests
-
-### ⏳ Phase 2: Framework Architecture
-
-- [ ] Dependency injection container
-- [ ] Service providers
-- [ ] Configuration management
-- [ ] Application lifecycle improvements
-- [ ] Enhanced CLI commands
-
-### ⏳ Phase 3: Database Layer
-
-- [ ] Database connection management
-- [ ] Query builder
-- [ ] ORM
-- [ ] Database migrations
-- [ ] Database seeders
-- [ ] Model relationships
-
-### ⏳ Phase 4: Web Application Features
-
-- [ ] Middleware
-- [ ] Authentication
-- [ ] Session management
-- [ ] CSRF protection
-- [ ] Request validation
-- [ ] Template engine
-
-### ⏳ Phase 5: Developer Experience
-
-- [ ] Model and controller generators
-- [ ] Advanced CLI tooling
-- [ ] Logging
-- [ ] Caching
-- [ ] Queue system
-- [ ] Improved testing utilities
-
-### ⏳ Phase 6: Ecosystem and Distribution
-
-- [ ] Composer distribution
-- [ ] Project installer
-- [ ] Package system
-- [ ] Official documentation
-- [ ] Release versioning
-- [ ] Community contributions
-
-## 🔐 Security
-
-NovaPHP is currently an experimental framework and does not yet provide a complete production security model.
-
-The following features are not yet implemented:
-
-- Authentication and authorization
-- CSRF protection
-- Security middleware
-- Session security controls
-- Comprehensive request validation
-- Production security hardening
-
-For development, exception details can be enabled using:
-
-```env
-APP_DEBUG=true
-```
-
-**Never enable debugging in a public production environment.**
-
-For deployment, disable debugging and configure the web server document root to point to `public/`.
-
-## 🤝 Contributing
-
-Contributions, suggestions, and feedback are welcome.
-
-If you would like to contribute:
-
-1. Fork the repository.
-2. Create a feature branch.
-3. Make your changes.
-4. Add or update relevant tests.
-5. Submit a pull request.
-
-As NovaPHP is in early development, please open an issue before proposing major architectural changes.
-
-## 📄 License
-
-NovaPHP is intended to be released as open-source software under the **MIT License**.
-
-See the `LICENSE` file for the full license terms once it has been added to the repository.
-
-## 👨‍💻 Author
-
-**Kwenziwa Khanyile**
-
-Software Developer | PHP & Full-Stack Development
-
-GitHub: [@Kwenziwa](https://github.com/Kwenziwa)
-
-## ⭐ Support NovaPHP
-
-If you find NovaPHP interesting, consider giving the repository a star on GitHub.
-
-Your support helps encourage the continued development of the framework.
-
----
-
-**NovaPHP: Build Beyond the Framework.** 🚀
-
-*Built from scratch. Designed for developers.*
+Middleware, authentication, CSRF protection, persistence, a template engine, and a hardened security model remain future work. The static welcome page is loaded as text, not interpreted as a PHP template. Enable `APP_DEBUG=true` only on a private development machine. Deploy with debug disabled and a proper web server document root pointing at `public/`.

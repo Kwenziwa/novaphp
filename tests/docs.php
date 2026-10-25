@@ -25,3 +25,8 @@ check(!str_contains($html, 'href="javascript:') && str_contains($html, 'href="/d
 check(str_contains($html, 'id="hello"') && str_contains($html, 'id="hello-2"'), 'documentation heading anchors are unique');
 $table = $renderer->render("| Name | Purpose |\n| --- | --- |\n| `id` | **Key** |\n\n- One\n- Two\n");
 check(str_contains($table, '<table>') && str_contains($table, '<code>id</code>') && str_contains($table, '<li>Two</li>'), 'documentation renders tables lists and inline code');
+
+$models = $documentationApp->handle(new Request('GET', '/docs/models'))->body;
+check(str_contains($models, 'Nova Records') && str_contains($models, 'WRITABLE') && str_contains($models, 'belongsTo'), 'models guide documents writes protection and relations');
+$controllers = $documentationApp->handle(new Request('GET', '/docs/controllers'))->body;
+check(str_contains($controllers, 'make:controller') && str_contains($controllers, 'Request') && str_contains($controllers, '404'), 'controllers guide documents generation injection and missing records');

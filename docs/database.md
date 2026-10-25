@@ -50,4 +50,4 @@ $result = $database->transaction(function (Nova\Database\Connection $database) {
 
 `transaction()` commits the callback result or rolls back and rethrows on failure. Nested transactions are rejected; savepoints are not implemented. Keep transaction control inside this helper and avoid DDL in application transactions. MySQL transactions require a transactional storage engine such as InnoDB.
 
-`App\Repositories\NoteRepository` contains the demo's SQL, separate from validation and HTTP rendering. There is no ORM or query builder in this phase. `pdo()` remains available for driver-specific operations.
+`App\Repositories\NoteRepository` delegates persistence to the `App\Models\Note` model through Nova Records, separate from validation and HTTP rendering. Raw SQL and `pdo()` remain available. See [the models guide](/docs/models) for the ORM API.

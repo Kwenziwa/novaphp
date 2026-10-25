@@ -20,6 +20,8 @@ Open [the welcome page](http://127.0.0.1:8000) or [the documentation](/docs). Th
 
 ## Try the included features
 
+- [Controllers](/docs/controllers): route handlers, injection, validation, and responses.
+- [Models](/docs/models): Nova Records queries, persistence, casts, and relations.
 - [Migrations](/docs/migrations): field maps and raw SQL, with reversible changes.
 - [Database](/docs/database): SQLite, MySQL configuration, and transactions.
 - [Routing and middleware](/docs/routing): requests, controllers, and grouped routes.

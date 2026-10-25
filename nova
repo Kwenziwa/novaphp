@@ -46,6 +46,14 @@ try {
             fclose($file);
             echo "Created app/Controllers/{$name}.php\n";
             break;
+        case 'make:model':
+            if (count($argv) > 4 || (isset($argv[3]) && !str_starts_with($argv[3], '--table='))) {
+                throw new RuntimeException('Usage: php nova make:model Name [--table=table_name]');
+            }
+            (new \Nova\Database\ModelGenerator(__DIR__ . '/app/Models'))->make(
+                $argv[2] ?? '', isset($argv[3]) ? substr($argv[3], 8) : null);
+            echo 'Created app/Models/' . $argv[2] . ".php\n";
+            break;
         case 'make:migration':
         case 'migrate':
         case 'migrate:status':
@@ -57,7 +65,7 @@ try {
                 __DIR__ . '/database/migrations'))->run($command, $argv[2] ?? null, ($argv[3] ?? null) === '--sql');
             break;
         case 'help':
-            echo "NovaPHP CLI\n  php nova serve [127.0.0.1:8000]\n  php nova route:list\n  php nova make:controller PostController\n  php nova config:show [app.debug]\n  php nova make:migration create_widgets [--sql]\n  php nova migrate\n  php nova migrate:status\n  php nova migrate:rollback\n";
+            echo "NovaPHP CLI\n  php nova serve [127.0.0.1:8000]\n  php nova route:list\n  php nova make:controller PostController\n  php nova make:model Post [--table=posts]\n  php nova config:show [app.debug]\n  php nova make:migration create_widgets [--sql]\n  php nova migrate\n  php nova migrate:status\n  php nova migrate:rollback\n";
             break;
         default:
             fwrite(STDERR, "Unknown command: {$command}\n");

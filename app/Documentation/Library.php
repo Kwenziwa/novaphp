@@ -8,6 +8,8 @@ final class Library
 {
     public const PAGES = [
         'getting-started' => ['title' => 'Getting started', 'file' => 'getting-started.md', 'description' => 'Install, run, and explore NovaPHP.'],
+        'controllers' => ['title' => 'Controllers', 'file' => 'controllers.md', 'description' => 'Generate controllers, validate input, and return responses.'],
+        'models' => ['title' => 'Models & Nova Records', 'file' => 'models.md', 'description' => 'Query and persist models with NovaPHP’s own ORM.'],
         'migrations' => ['title' => 'Migrations', 'file' => 'migrations.md', 'description' => 'Define tables with field maps or raw SQL.'],
         'database' => ['title' => 'Database', 'file' => 'database.md', 'description' => 'Configure PDO, bind values, and use transactions.'],
         'routing' => ['title' => 'Routing & middleware', 'file' => 'routing.md', 'description' => 'Connect URLs, controllers, and middleware.'],

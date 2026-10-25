@@ -6,7 +6,7 @@ An independent educational PHP framework for PHP 8.2+, with no third-party runti
 
 ## Browser documentation
 
-Run `php nova serve` and open [the documentation](http://127.0.0.1:8000/docs). The guide covers setup, migrations and schema fields, database queries, routing, forms, services, configuration, and CLI commands.
+Run `php nova serve` and open [the documentation](http://127.0.0.1:8000/docs). The guide covers setup, controllers, Nova Records models, migrations and schema fields, database queries, routing, forms, services, configuration, and CLI commands.
 
 Documentation source lives in `docs/*.md`. Edit a file and reload its browser page to preview it. The allowlisted catalog in `app/Documentation/Library.php` controls navigation. No frontend build step or Markdown package is needed.
 
@@ -21,6 +21,7 @@ Visit http://127.0.0.1:8000. Composer is optional: a built-in PSR-4 fallback loa
 ```bash
 php nova route:list
 php nova make:controller PostController
+php nova make:model Post
 php nova config:show app.name
 php tests/run.php
 curl http://127.0.0.1:8000/api/health
@@ -33,6 +34,22 @@ curl -X POST http://127.0.0.1:8000/api/echo \
 ```php
 $router->get('/posts', [App\Controllers\PostController::class, 'index']);
 ```
+
+## Nova Records: models and ORM
+
+NovaPHP's ORM uses explicit connections and named model fields:
+
+```php
+use App\Models\Note;
+
+$notes = Note::using($database)->where('title', 'LIKE', '%Nova%')->orderBy('id', 'desc')->take(20)->all();
+$note = Note::using($database)->create(['title' => 'Hello Nova', 'body' => 'A saved record']);
+$note->title = 'Updated';
+$note->save();
+$note->delete();
+```
+
+Generate a model with `php nova make:model Post [--table=posts]`, then declare its `WRITABLE` fields. Nova Records supports immutable filtered queries, row persistence, casts, hidden attributes, opt-in timestamps, and explicit belongs-to/has-many relations. The notes demo uses it while retaining existing HTTP behavior. Read [models](/docs/models) and [controllers](/docs/controllers) in the browser documentation for complete examples and limitations.
 
 ## Phase 4: database access and migrations
 
@@ -86,7 +103,7 @@ $result = $database->transaction(function (Nova\Database\Connection $database) {
 
 `transaction()` commits the callback result or rolls back and rethrows on failure. Nested transactions are rejected; savepoints are not implemented. Keep transaction control inside this helper and avoid DDL in application transactions. MySQL transactions require a transactional storage engine such as InnoDB.
 
-`App\Repositories\NoteRepository` contains the demo's SQL, separate from validation and HTTP rendering. There is no ORM or query builder in this phase. `pdo()` remains available for driver-specific operations.
+`App\Repositories\NoteRepository` delegates persistence to the `App\Models\Note` model through Nova Records, separate from validation and HTTP rendering. Raw SQL and `pdo()` remain available. See [the models guide](/docs/models) for the ORM API.
 
 ### Migration commands
 
@@ -342,4 +359,4 @@ php tests/http.php  # Real HTTP/session smoke test; starts a temporary local ser
 
 The regression suite covers routing, DI, providers, config, environment loading, CLI, middleware order and short-circuits, grouped routes, sessions and flash lifecycle, CSRF, validation, escaped views, redirects, the contact form workflow, SQL parameter binding, transaction failures, migration batches and retries, CLI migrations, notes CRUD, field-map schema constraints and defaults, and both generated migration styles. The HTTP suite checks native cookie attributes, persistent tokens and flash messages, redirects, JSON errors, stateless API compatibility, and notes CRUD persistence across requests. It uses isolated temporary SQLite and session storage and cleans up its server/files. PHP process creation and localhost sockets must be available for the HTTP suite. No test framework is required.
 
-Authentication and ownership, an ORM, rate limiting, session idle/absolute expiry policies, and a hardened production security model remain future work. The static welcome page is loaded as text, not interpreted as a PHP template. Enable `APP_DEBUG=true` only on a private development machine. Deploy with debug disabled and a proper web server document root pointing at `public/`.
+Authentication and ownership, advanced ORM features, rate limiting, session idle/absolute expiry policies, and a hardened production security model remain future work. The static welcome page is loaded as text, not interpreted as a PHP template. Enable `APP_DEBUG=true` only on a private development machine. Deploy with debug disabled and a proper web server document root pointing at `public/`.

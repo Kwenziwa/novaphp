@@ -83,6 +83,8 @@ try {
     httpCheck($status === 200 && str_contains($body, 'Field::id()') && !str_contains(strtolower($headers), 'set-cookie:'), 'native documentation renders without a session');
     httpCheck($fetch('GET', '/assets/docs.css')[0] === 200, 'native documentation stylesheet served');
     httpCheck($fetch('GET', '/docs/unknown')[0] === 404, 'native unknown documentation page returns 404');
+    httpCheck(str_contains($fetch('GET', '/docs/controllers')[1], 'make:controller'), 'native controller documentation');
+    httpCheck(str_contains($fetch('GET', '/docs/models')[1], 'Nova Records'), 'native ORM documentation');
     echo "HTTP tests passed.\n";
 } finally {
     proc_terminate($process);

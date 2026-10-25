@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Repositories;
 
 use Nova\Database\Connection;
+use App\Models\Note;
 
 final class NoteRepository
 {
@@ -12,28 +13,27 @@ final class NoteRepository
 
     public function all(): array
     {
-        return $this->database->select('SELECT id, title, body, created_at FROM notes ORDER BY id DESC LIMIT 100');
+        return array_map(fn (Note $note): array => $note->toArray(),
+            Note::using($this->database)->orderBy('id', 'desc')->take(100)->all());
     }
 
     public function find(int $id): ?array
     {
-        return $this->database->first('SELECT id, title, body, created_at FROM notes WHERE id = ?', [$id]);
+        return Note::using($this->database)->find($id)?->toArray();
     }
 
     public function create(array $data): int
     {
-        $this->database->execute('INSERT INTO notes (title, body, created_at) VALUES (:title, :body, :created_at)',
-            ['title' => $data['title'], 'body' => $data['body'], 'created_at' => gmdate('c')]);
-        return (int) $this->database->lastInsertId();
+        return Note::using($this->database)->create($data)->id;
     }
 
     public function update(int $id, array $data): void
     {
-        $this->database->execute('UPDATE notes SET title = ?, body = ? WHERE id = ?', [$data['title'], $data['body'], $id]);
+        Note::using($this->database)->find($id)?->fill($data)->save();
     }
 
     public function delete(int $id): int
     {
-        return $this->database->execute('DELETE FROM notes WHERE id = ?', [$id]);
+        return (int) (Note::using($this->database)->find($id)?->delete() ?? false);
     }
 }

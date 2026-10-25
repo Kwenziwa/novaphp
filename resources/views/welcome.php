@@ -13,6 +13,6 @@
   </style>
 </head>
 <body><main><h1>🚀 NovaPHP</h1><p>Your independent PHP framework is running.</p>
-  <a href="/hello/Developer">Dynamic route</a><a href="/api/health">API endpoint</a>
+  <a href="/docs">Documentation</a><a href="/hello/Developer">Dynamic route</a><a href="/api/health">API endpoint</a>
 </main></body>
 </html>

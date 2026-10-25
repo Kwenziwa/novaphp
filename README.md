@@ -4,6 +4,12 @@ An independent educational PHP framework for PHP 8.2+, with no third-party runti
 
 🚧 NovaPHP is in early development and is not recommended for production use.
 
+## Browser documentation
+
+Run `php nova serve` and open [the documentation](http://127.0.0.1:8000/docs). The guide covers setup, migrations and schema fields, database queries, routing, forms, services, configuration, and CLI commands.
+
+Documentation source lives in `docs/*.md`. Edit a file and reload its browser page to preview it. The allowlisted catalog in `app/Documentation/Library.php` controls navigation. No frontend build step or Markdown package is needed.
+
 ## Run
 
 ```bash
@@ -179,7 +185,7 @@ public function down(Connection $database): void
 }
 ```
 
-Raw SQL is executed as written and must match your database dialect. Use bindings for data values. You can create a table with `schema()->create()` and then insert data with `execute()` in the same migration; see `examples/migrations/create_posts.php`. Examples are not automatically migrated. The original notes migration remains unchanged, and existing raw SQL migrations continue to work.
+Raw SQL is executed as written and must match your database dialect. Use bindings for data values. You can create a table with `schema()->create()` and then insert data with `execute()` in the same migration; use the complete field-map example above and add the bound insert in its `up()` method. Documentation code blocks are never executed by the browser preview. The original notes migration remains unchanged, and existing raw SQL migrations continue to work.
 
 Pending files apply in filename order. `nova_migrations` tracks applied names, batches, and UTC timestamps. Repeating `migrate` skips applied files; each invocation with new migrations receives the next batch number. `migrate:rollback` reverses the latest batch in reverse filename order. It can delete tables/data through the migration's `down()` method. Status shows applied/pending migrations, batches, and missing files; it initializes the history table if needed. Do not edit or rename applied migrations—add a new migration instead.
 

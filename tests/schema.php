@@ -100,11 +100,7 @@ try {
     $migrationDb->execute('INSERT INTO schema_posts DEFAULT VALUES');
     check((int) $migrationDb->first('SELECT id FROM schema_posts')['id'] === 1, 'schema-created table accepts raw SQL queries');
     check(count($runner->rollback()) === 2 && $runner->migrate() !== [], 'both generated styles roll back and reapply');
-    $example = require dirname(__DIR__) . '/examples/migrations/create_posts.php';
-    $example->up($migrationDb);
-    check($migrationDb->first('SELECT title FROM posts')['title'] === 'Welcome', 'example combines schema creation and bound SQL seeding');
-    $example->down($migrationDb);
-    check($migrationDb->first("SELECT name FROM sqlite_master WHERE name = 'posts'") === null, 'example reverses its schema');
+
 } finally {
     foreach (glob($directory . '/*') ?: [] as $file) { unlink($file); }
     if (is_file($directory . '/.nova-migrate.lock')) { unlink($directory . '/.nova-migrate.lock'); }

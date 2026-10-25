@@ -79,6 +79,10 @@ try {
     httpCheck(str_contains($fetch('GET', '/notes/' . $id . '/edit')[1], 'Updated body'), 'native notes edit reloads persisted data');
     httpCheck($fetch('POST', '/notes/' . $id . '/delete', ['_token' => $noteToken[1]], true)[0] === 200, 'native notes delete');
     httpCheck($fetch('GET', '/notes/' . $id . '/edit')[0] === 404, 'native deleted note returns 404');
+    [$status, $body, $headers] = $fetch('GET', '/docs/migrations');
+    httpCheck($status === 200 && str_contains($body, 'Field::id()') && !str_contains(strtolower($headers), 'set-cookie:'), 'native documentation renders without a session');
+    httpCheck($fetch('GET', '/assets/docs.css')[0] === 200, 'native documentation stylesheet served');
+    httpCheck($fetch('GET', '/docs/unknown')[0] === 404, 'native unknown documentation page returns 404');
     echo "HTTP tests passed.\n";
 } finally {
     proc_terminate($process);

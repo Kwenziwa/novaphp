@@ -16,6 +16,8 @@ return static function (Router $router): void {
             $router->get('/contact', [\App\Controllers\ContactController::class, 'show']);
             $router->post('/contact', [\App\Controllers\ContactController::class, 'store']);
         });
+    $router->get('/docs', [\App\Controllers\DocumentationController::class, 'index']);
+    $router->get('/docs/{page}', [\App\Controllers\DocumentationController::class, 'show']);
     $router->get('/', [HomeController::class, 'index']);
     $router->get('/hello/{name}', static fn (string $name): string =>
         '<h1>Hello, ' . htmlspecialchars($name, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '!</h1>');

@@ -16,6 +16,7 @@ final class Application
     public readonly \Nova\Config\Repository $config;
     private array $providers = [];
     private bool $booted = false;
+    private array $middleware = [];
 
     public function __construct(public readonly string $basePath)
     {
@@ -54,10 +55,20 @@ final class Application
         foreach ($this->providers as $provider) { $provider->boot(); }
     }
 
+    public function middleware(array $middleware): void
+    {
+        $this->middleware = [...$this->middleware, ...$middleware];
+    }
+
     public function handle(Request $request): Response
     {
         try {
-            return $this->router->dispatch($request);
+            return \Nova\Http\Pipeline::run($request, $this->middleware,
+                fn (Request $request): Response => $this->router->dispatch($request), $this->container);
+        } catch (\Nova\Validation\ValidationException $error) {
+            if ($request->expectsJson()) { return Response::json(['errors' => $error->errors], 422); }
+            $messages = htmlspecialchars(json_encode($error->errors, JSON_THROW_ON_ERROR), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            return Response::html('<h1>Validation failed</h1><pre>' . $messages . '</pre>', 422);
         } catch (Throwable $error) {
             error_log('[NovaPHP] ' . (string) $error);
             if ($this->config->get('app.debug', false)) {

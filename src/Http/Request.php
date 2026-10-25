@@ -36,6 +36,17 @@ final class Request
         return new self($method, $path, $_GET, $body, $headers);
     }
 
+    public function expectsJson(): bool
+    {
+        return str_contains(strtolower((string) $this->header('accept', '')), 'json')
+            || str_contains(strtolower((string) $this->header('content-type', '')), 'json');
+    }
+
+    public function validate(array $rules): array
+    {
+        return (new \Nova\Validation\Validator())->validate($this->all(), $rules);
+    }
+
     public function query(string $key, mixed $default = null): mixed
     {
         return $this->query[$key] ?? $default;
@@ -44,6 +55,11 @@ final class Request
     public function input(string $key, mixed $default = null): mixed
     {
         return $this->body[$key] ?? $this->query[$key] ?? $default;
+    }
+
+    public function body(string $key, mixed $default = null): mixed
+    {
+        return $this->body[$key] ?? $default;
     }
 
     public function all(): array

@@ -28,6 +28,18 @@ final class Response
         return new self($text, $status, ['Content-Type' => 'text/plain; charset=UTF-8']);
     }
 
+    public static function redirect(string $path, int $status = 303): self
+    {
+        if (!str_starts_with($path, '/') || str_starts_with($path, '//')
+            || preg_match('/[\\\\\x00-\x20\x7f]/', $path)) {
+            throw new \InvalidArgumentException('Redirects require a local absolute path.');
+        }
+        if (!in_array($status, [301, 302, 303, 307, 308], true)) {
+            throw new \InvalidArgumentException('Invalid redirect status.');
+        }
+        return new self('', $status, ['Location' => $path]);
+    }
+
     public function send(bool $headOnly = false): void
     {
         http_response_code($this->status);

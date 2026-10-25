@@ -14,21 +14,36 @@ use RuntimeException;
 final class Router
 {
     private array $routes = [];
+    private array $groups = [];
 
     public function __construct(private readonly \Nova\Core\Container $container = new \Nova\Core\Container()) {}
 
-    public function get(string $path, callable|array $handler): void { $this->add('GET', $path, $handler); }
-    public function post(string $path, callable|array $handler): void { $this->add('POST', $path, $handler); }
-    public function put(string $path, callable|array $handler): void { $this->add('PUT', $path, $handler); }
-    public function patch(string $path, callable|array $handler): void { $this->add('PATCH', $path, $handler); }
-    public function delete(string $path, callable|array $handler): void { $this->add('DELETE', $path, $handler); }
+    public function get(string $path, callable|array $handler, array $middleware = []): void { $this->add('GET', $path, $handler, $middleware); }
+    public function post(string $path, callable|array $handler, array $middleware = []): void { $this->add('POST', $path, $handler, $middleware); }
+    public function put(string $path, callable|array $handler, array $middleware = []): void { $this->add('PUT', $path, $handler, $middleware); }
+    public function patch(string $path, callable|array $handler, array $middleware = []): void { $this->add('PATCH', $path, $handler, $middleware); }
+    public function delete(string $path, callable|array $handler, array $middleware = []): void { $this->add('DELETE', $path, $handler, $middleware); }
 
-    public function add(string $method, string $path, callable|array $handler): void
+    public function group(string $prefix, array $middleware, \Closure $routes): void
+    {
+        if ($prefix !== '' && $prefix[0] !== '/') { throw new RuntimeException('Group prefixes must begin with /.'); }
+        $this->groups[] = [rtrim($prefix, '/'), $middleware];
+        try { $routes($this); } finally { array_pop($this->groups); }
+    }
+
+    public function add(string $method, string $path, callable|array $handler, array $middleware = []): void
     {
         if ($path === '' || $path[0] !== '/') {
             throw new RuntimeException('Route paths must begin with /.');
         }
-        $this->routes[] = [strtoupper($method), $path, $handler];
+        $prefix = '';
+        $inherited = [];
+        foreach ($this->groups as [$segment, $stack]) {
+            $prefix .= $segment;
+            $inherited = [...$inherited, ...$stack];
+        }
+        $path = $prefix . $path;
+        $this->routes[] = [strtoupper($method), $path, $handler, [...$inherited, ...$middleware]];
     }
 
     public function routes(): array { return $this->routes; }
@@ -36,22 +51,28 @@ final class Router
     public function dispatch(Request $request): Response
     {
         $allowed = [];
-        foreach ($this->routes as [$method, $path, $handler]) {
-            $pattern = preg_replace_callback('/\{([a-zA-Z_][a-zA-Z0-9_]*)\}/',
-                static fn (array $m): string => '(?P<' . $m[1] . '>[^/]+)', $path);
-            $pattern = '~^' . str_replace('~', '\~', $pattern) . '/?$~D';
-            if ($path === '/') { $pattern = '~^/$~D'; }
+        foreach ($this->routes as [$method, $path, $handler, $middleware]) {
+            $parts = preg_split('/(\{[a-zA-Z_][a-zA-Z0-9_]*\})/', $path, -1, PREG_SPLIT_DELIM_CAPTURE);
+            $pattern = '';
+            foreach ($parts as $part) {
+                $pattern .= preg_match('/^\{([a-zA-Z_][a-zA-Z0-9_]*)\}$/', $part, $match)
+                    ? '(?P<' . $match[1] . '>[^/]+)' : preg_quote($part, '~');
+            }
+            $pattern = $path === '/' ? '~^/$~D' : '~^' . rtrim($pattern, '/') . '/?$~D';
             if (!preg_match($pattern, $request->path, $matches)) { continue; }
             if ($method !== $request->method && !($request->method === 'HEAD' && $method === 'GET')) {
                 $allowed[] = $method;
                 continue;
             }
             $params = array_filter($matches, 'is_string', ARRAY_FILTER_USE_KEY);
-            $result = $this->invoke($handler, $request, $params);
-            if ($result instanceof Response) { return $result; }
-            if (is_array($result)) { return Response::json($result); }
-            if (is_string($result)) { return Response::html($result); }
-            throw new RuntimeException('Route handlers must return Response, array, or string.');
+            return \Nova\Http\Pipeline::run($request, $middleware,
+                function (Request $request) use ($handler, $params): Response {
+                    $result = $this->invoke($handler, $request, $params);
+                    if ($result instanceof Response) { return $result; }
+                    if (is_array($result)) { return Response::json($result); }
+                    if (is_string($result)) { return Response::html($result); }
+                    throw new RuntimeException('Route handlers must return Response, array, or string.');
+                }, $this->container);
         }
         if ($allowed !== []) {
             return new Response('405 Method Not Allowed', 405,

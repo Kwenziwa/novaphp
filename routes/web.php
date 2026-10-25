@@ -8,6 +8,11 @@ use Nova\Routing\Router;
 return static function (Router $router): void {
     $router->group('', [\Nova\Http\Middleware\StartSession::class, \Nova\Http\Middleware\VerifyCsrfToken::class],
         static function (Router $router): void {
+            $router->get('/notes', [\App\Controllers\NoteController::class, 'index']);
+            $router->post('/notes', [\App\Controllers\NoteController::class, 'store']);
+            $router->get('/notes/{id}/edit', [\App\Controllers\NoteController::class, 'edit']);
+            $router->post('/notes/{id}', [\App\Controllers\NoteController::class, 'update']);
+            $router->post('/notes/{id}/delete', [\App\Controllers\NoteController::class, 'delete']);
             $router->get('/contact', [\App\Controllers\ContactController::class, 'show']);
             $router->post('/contact', [\App\Controllers\ContactController::class, 'store']);
         });

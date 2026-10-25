@@ -4,6 +4,7 @@
 declare(strict_types=1);
 
 $root = dirname(__DIR__);
+require_once $root . '/bootstrap/autoload.php';
 $socket = stream_socket_server('tcp://127.0.0.1:0', $errno, $error);
 if ($socket === false) { throw new RuntimeException($error); }
 $address = stream_socket_get_name($socket, false);
@@ -11,9 +12,12 @@ fclose($socket);
 $directory = sys_get_temp_dir() . '/nova-http-' . bin2hex(random_bytes(8));
 mkdir($directory, 0700);
 $log = $directory . '/server.log';
+$testDatabase = $directory . '/database.sqlite';
+(new \Nova\Database\Migrator(new \Nova\Database\Connection(['driver' => 'sqlite', 'database' => $testDatabase]),
+    $root . '/database/migrations'))->migrate();
 $process = proc_open([PHP_BINARY, '-d', 'session.save_path=' . $directory, '-S', $address,
     '-t', $root . '/public', $root . '/public/router.php'],
-    [0 => ['pipe', 'r'], 1 => ['file', $log, 'a'], 2 => ['file', $log, 'a']], $pipes, $root);
+    [0 => ['pipe', 'r'], 1 => ['file', $log, 'a'], 2 => ['file', $log, 'a']], $pipes, $root, array_replace(getenv(), ['DB_CONNECTION' => 'sqlite', 'DB_DATABASE' => $testDatabase]));
 if (!is_resource($process)) { throw new RuntimeException('Cannot start HTTP test server.'); }
 fclose($pipes[0]);
 
@@ -64,6 +68,17 @@ try {
     httpCheck($status === 422 && isset(json_decode($body, true)['errors']['name']), 'native JSON validation errors');
     httpCheck($fetch('POST', '/api/echo', ['message' => 'compatible'], true)[0] === 201, 'native API compatibility');
     httpCheck(!str_contains(strtolower($fetch('GET', '/api/health')[2]), 'set-cookie:'), 'stateless API creates no session');
+    [$status, $body] = $fetch('GET', '/notes');
+    httpCheck($status === 200 && preg_match('/name="_token" value="([a-f0-9]{64})"/', $body, $noteToken) === 1, 'native notes form');
+    httpCheck($fetch('POST', '/notes', ['title' => 'forbidden', 'body' => 'no token'])[0] === 419, 'native notes CSRF rejection');
+    [$status, $body] = $fetch('POST', '/notes', ['_token' => $noteToken[1], 'title' => '<b>Note</b>', 'body' => 'Native persistence'], true);
+    $id = json_decode($body, true)['note']['id'] ?? null;
+    httpCheck($status === 201 && $id !== null, 'native notes create persists');
+    httpCheck(str_contains($fetch('GET', '/notes')[1], '&lt;b&gt;Note&lt;/b&gt;'), 'native notes read escapes persisted HTML');
+    httpCheck($fetch('POST', '/notes/' . $id, ['_token' => $noteToken[1], 'title' => 'Updated', 'body' => 'Updated body'], true)[0] === 200, 'native notes update persists');
+    httpCheck(str_contains($fetch('GET', '/notes/' . $id . '/edit')[1], 'Updated body'), 'native notes edit reloads persisted data');
+    httpCheck($fetch('POST', '/notes/' . $id . '/delete', ['_token' => $noteToken[1]], true)[0] === 200, 'native notes delete');
+    httpCheck($fetch('GET', '/notes/' . $id . '/edit')[0] === 404, 'native deleted note returns 404');
     echo "HTTP tests passed.\n";
 } finally {
     proc_terminate($process);

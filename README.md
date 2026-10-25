@@ -1,6 +1,6 @@
-# NovaPHP — Phase 3
+# NovaPHP — Phase 4
 
-An independent educational PHP framework with no runtime dependencies beyond PHP 8.2+.
+An independent educational PHP framework for PHP 8.2+, with no third-party runtime packages. Database features require PDO and `pdo_sqlite` (default) or `pdo_mysql`. Existing non-database routes do not require a database connection.
 
 🚧 NovaPHP is in early development and is not recommended for production use.
 
@@ -27,6 +27,79 @@ curl -X POST http://127.0.0.1:8000/api/echo \
 ```php
 $router->get('/posts', [App\Controllers\PostController::class, 'index']);
 ```
+
+## Phase 4: database access and migrations
+
+### Run the notes demo
+
+```bash
+php nova migrate
+php nova serve
+```
+
+Visit `/notes` to create, list, edit, and delete notes. The browser forms use sessions, CSRF protection, validation, escaped output, and flash messages. The list shows the latest 100 notes. Missing or malformed note IDs return 404. JSON requests to the list/create/update/delete endpoints receive JSON responses; mutations still require a session CSRF token. There is no authentication or ownership yet: this is a shared development demo, so use sample data only.
+
+SQLite defaults to `storage/database.sqlite`. The tracked `storage/` directory must be writable. Relative SQLite paths are resolved from the project root; absolute paths and `:memory:` are also supported. Database files and SQLite sidecars are ignored by Git. Migrations run explicitly, never on HTTP requests or application bootstrap.
+
+```dotenv
+DB_CONNECTION=sqlite
+DB_DATABASE=storage/database.sqlite
+```
+
+For an existing MySQL database, use:
+
+```dotenv
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=nova
+DB_USERNAME=nova
+DB_PASSWORD='your local password'
+```
+
+Create the MySQL database/user separately and enable `pdo_mysql`; NovaPHP does not provision a server or database. Connections use utf8mb4, exception mode, associative fetches, and native prepared statements. SQLite enables foreign keys and a five-second busy timeout. The connection is lazy and shared through the DI container. Existing environment variables override `.env` as before.
+
+### Queries and transactions
+
+Inject `Nova\Database\Connection` into a controller or repository:
+
+```php
+$notes = $database->select('SELECT * FROM notes WHERE title = ?', [$title]);
+$note = $database->first('SELECT * FROM notes WHERE id = :id', ['id' => $id]);
+$affected = $database->execute('UPDATE notes SET title = ? WHERE id = ?', [$title, $id]);
+$id = $database->lastInsertId();
+
+$result = $database->transaction(function (Nova\Database\Connection $database) {
+    $database->execute('INSERT INTO notes (title, body, created_at) VALUES (?, ?, ?)',
+        ['Example', 'A note', gmdate('c')]);
+    return $database->lastInsertId();
+});
+```
+
+`select()` returns rows, `first()` returns a row or null, and `execute()` returns the PDO affected-row count (which can vary by driver for unchanged updates). `lastInsertId()` returns a string. Bindings support strings, numbers, booleans, and null, with positional or named placeholders. Values are bound separately from SQL; table names, column names, and sort directions must come from trusted code or an explicit allowlist. Use unique named placeholders in each statement. See [PDO prepared statements](https://www.php.net/manual/en/pdo.prepare.php).
+
+`transaction()` commits the callback result or rolls back and rethrows on failure. Nested transactions are rejected; savepoints are not implemented. Keep transaction control inside this helper and avoid DDL in application transactions. MySQL transactions require a transactional storage engine such as InnoDB.
+
+`App\Repositories\NoteRepository` contains the demo's SQL, separate from validation and HTTP rendering. There is no ORM or query builder in this phase. `pdo()` remains available for driver-specific operations.
+
+### Migration commands
+
+```bash
+php nova make:migration create_widgets
+php nova migrate:status
+php nova migrate
+php nova migrate:rollback
+```
+
+The generator accepts a snake_case name of at most 100 characters and creates a timestamped PHP file under `database/migrations/`. Each file returns an anonymous class implementing `Nova\Database\Migration` with `up(Connection $database): void` and `down(Connection $database): void`. Write the SQL for both directions before running it. Files are trusted PHP code. The included notes migration supports SQLite and MySQL auto-increment syntax.
+
+Pending files apply in filename order. `nova_migrations` tracks applied names, batches, and UTC timestamps. Repeating `migrate` skips applied files; each invocation with new migrations receives the next batch number. `migrate:rollback` reverses the latest batch in reverse filename order. It can delete tables/data through the migration's `down()` method. Status shows applied/pending migrations, batches, and missing files; it initializes the history table if needed. Do not edit or rename applied migrations—add a new migration instead.
+
+A local file lock serializes migration commands using the same migration directory. It is not a distributed lock across servers or separate checkouts; coordinate deployments accordingly. The migration directory must be writable for the lock file. No automatic retry or destructive reset command is provided.
+
+Each SQLite migration and its history update run in one transaction. A failure leaves earlier successful migrations applied and the failed migration pending. Rollbacks are also transactional per migration, rather than per batch. Missing files are detected before rolling back a batch. MySQL DDL can commit implicitly, so failed MySQL migrations may leave partial schema changes requiring manual repair; inspect status and schema before retrying. See [PDO transactions and implicit commits](https://www.php.net/manual/en/pdo.transactions.php).
+
+SQLite regression and HTTP tests run against isolated databases. MySQL configuration and SQL support are included, but this phase has not been verified against a live MySQL server.
 
 ## Phase 3: middleware and web forms
 
@@ -169,10 +242,10 @@ Config inspection prints the requested values without redaction; run it locally 
 ## Verification and limits
 
 ```bash
-php tests/run.php   # Phase 1–3 regression suite
+php tests/run.php   # Phase 1–4 regression suite
 php tests/http.php  # Real HTTP/session smoke test; starts a temporary local server
 ```
 
-The regression suite covers routing, DI, providers, config, environment loading, CLI, middleware order and short-circuits, grouped routes, sessions and flash lifecycle, CSRF, validation, escaped views, redirects, and the complete contact form workflow. The HTTP suite checks native cookie attributes, persistent tokens and flash messages, redirects, JSON errors, and stateless API compatibility. It uses isolated temporary session storage and cleans up its server/files. PHP process creation and localhost sockets must be available for the HTTP suite. No test framework is required.
+The regression suite covers routing, DI, providers, config, environment loading, CLI, middleware order and short-circuits, grouped routes, sessions and flash lifecycle, CSRF, validation, escaped views, redirects, the contact form workflow, SQL parameter binding, transaction failures, migration batches and retries, CLI migrations, and notes CRUD. The HTTP suite checks native cookie attributes, persistent tokens and flash messages, redirects, JSON errors, stateless API compatibility, and notes CRUD persistence across requests. It uses isolated temporary SQLite and session storage and cleans up its server/files. PHP process creation and localhost sockets must be available for the HTTP suite. No test framework is required.
 
-Authentication, persistence, rate limiting, session idle/absolute expiry policies, and a hardened production security model remain future work. The static welcome page is loaded as text, not interpreted as a PHP template. Enable `APP_DEBUG=true` only on a private development machine. Deploy with debug disabled and a proper web server document root pointing at `public/`.
+Authentication and ownership, an ORM, rate limiting, session idle/absolute expiry policies, and a hardened production security model remain future work. The static welcome page is loaded as text, not interpreted as a PHP template. Enable `APP_DEBUG=true` only on a private development machine. Deploy with debug disabled and a proper web server document root pointing at `public/`.

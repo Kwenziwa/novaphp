@@ -6,49 +6,61 @@ declare(strict_types=1);
 $app = require __DIR__ . '/bootstrap/app.php';
 $command = $argv[1] ?? 'help';
 
-switch ($command) {
-    case 'serve':
-        $host = $argv[2] ?? '127.0.0.1:8000';
-        if (!preg_match('/^(127\.0\.0\.1|localhost):[0-9]{1,5}$/', $host)) {
-            fwrite(STDERR, "Use localhost:PORT or 127.0.0.1:PORT.\n");
+try {
+    switch ($command) {
+        case 'serve':
+            $host = $argv[2] ?? '127.0.0.1:8000';
+            if (!preg_match('/^(127\.0\.0\.1|localhost):[0-9]{1,5}$/', $host)) {
+                fwrite(STDERR, "Use localhost:PORT or 127.0.0.1:PORT.\n");
+                exit(1);
+            }
+            echo "NovaPHP available at http://{$host}\n";
+            $cmd = escapeshellarg(PHP_BINARY) . ' -S ' . escapeshellarg($host)
+                . ' -t ' . escapeshellarg(__DIR__ . '/public') . ' ' . escapeshellarg(__DIR__ . '/public/router.php');
+            passthru($cmd, $code);
+            exit($code);
+        case 'route:list':
+            foreach ($app->router->routes() as [$method, $path]) {
+                printf("%-8s %s\n", $method, $path);
+            }
+            break;
+        case 'config:show':
+            $key = $argv[2] ?? null;
+            $value = $key === null ? $app->config->all() : $app->config->get($key);
+            echo json_encode($value, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR) . "\n";
+            break;
+        case 'make:controller':
+            $name = $argv[2] ?? '';
+            if (!preg_match('/^[A-Z][A-Za-z0-9_]*Controller$/D', $name)) {
+                fwrite(STDERR, "Use a simple class name such as PostController.\n");
+                exit(1);
+            }
+            $path = __DIR__ . '/app/Controllers/' . $name . '.php';
+            $file = @fopen($path, 'x');
+            if ($file === false) {
+                fwrite(STDERR, "Controller exists or cannot be created.\n");
+                exit(1);
+            }
+            $source = "<?php\n\ndeclare(strict_types=1);\n\nnamespace App\\Controllers;\n\nfinal class {$name}\n{\n    public function index(): string\n    {\n        return 'Hello from {$name}';\n    }\n}\n";
+            fwrite($file, $source);
+            fclose($file);
+            echo "Created app/Controllers/{$name}.php\n";
+            break;
+        case 'make:migration':
+        case 'migrate':
+        case 'migrate:status':
+        case 'migrate:rollback':
+            (new \Nova\Database\Commands($app->container->make(\Nova\Database\Migrator::class),
+                __DIR__ . '/database/migrations'))->run($command, $argv[2] ?? null);
+            break;
+        case 'help':
+            echo "NovaPHP CLI\n  php nova serve [127.0.0.1:8000]\n  php nova route:list\n  php nova make:controller PostController\n  php nova config:show [app.debug]\n  php nova make:migration create_widgets\n  php nova migrate\n  php nova migrate:status\n  php nova migrate:rollback\n";
+            break;
+        default:
+            fwrite(STDERR, "Unknown command: {$command}\n");
             exit(1);
-        }
-        echo "NovaPHP available at http://{$host}\n";
-        $cmd = escapeshellarg(PHP_BINARY) . ' -S ' . escapeshellarg($host)
-            . ' -t ' . escapeshellarg(__DIR__ . '/public') . ' ' . escapeshellarg(__DIR__ . '/public/router.php');
-        passthru($cmd, $code);
-        exit($code);
-    case 'route:list':
-        foreach ($app->router->routes() as [$method, $path]) {
-            printf("%-8s %s\n", $method, $path);
-        }
-        break;
-    case 'config:show':
-        $key = $argv[2] ?? null;
-        $value = $key === null ? $app->config->all() : $app->config->get($key);
-        echo json_encode($value, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR) . "\n";
-        break;
-    case 'make:controller':
-        $name = $argv[2] ?? '';
-        if (!preg_match('/^[A-Z][A-Za-z0-9_]*Controller$/D', $name)) {
-            fwrite(STDERR, "Use a simple class name such as PostController.\n");
-            exit(1);
-        }
-        $path = __DIR__ . '/app/Controllers/' . $name . '.php';
-        $file = @fopen($path, 'x');
-        if ($file === false) {
-            fwrite(STDERR, "Controller exists or cannot be created.\n");
-            exit(1);
-        }
-        $source = "<?php\n\ndeclare(strict_types=1);\n\nnamespace App\\Controllers;\n\nfinal class {$name}\n{\n    public function index(): string\n    {\n        return 'Hello from {$name}';\n    }\n}\n";
-        fwrite($file, $source);
-        fclose($file);
-        echo "Created app/Controllers/{$name}.php\n";
-        break;
-    case 'help':
-        echo "NovaPHP CLI\n  php nova serve [127.0.0.1:8000]\n  php nova route:list\n  php nova make:controller PostController\n  php nova config:show [app.debug]\n";
-        break;
-    default:
-        fwrite(STDERR, "Unknown command: {$command}\n");
-        exit(1);
+    }
+} catch (Throwable $error) {
+    fwrite(STDERR, 'Error: ' . $error->getMessage() . "\n");
+    exit(1);
 }

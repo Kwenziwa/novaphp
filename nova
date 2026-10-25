@@ -1,0 +1,32 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+$app = require __DIR__ . '/bootstrap/app.php';
+$command = $argv[1] ?? 'help';
+
+switch ($command) {
+    case 'serve':
+        $host = $argv[2] ?? '127.0.0.1:8000';
+        if (!preg_match('/^(127\.0\.0\.1|localhost):[0-9]{1,5}$/', $host)) {
+            fwrite(STDERR, "Use localhost:PORT or 127.0.0.1:PORT.\n");
+            exit(1);
+        }
+        echo "NovaPHP available at http://{$host}\n";
+        $cmd = escapeshellarg(PHP_BINARY) . ' -S ' . escapeshellarg($host)
+            . ' -t ' . escapeshellarg(__DIR__ . '/public') . ' ' . escapeshellarg(__DIR__ . '/public/router.php');
+        passthru($cmd, $code);
+        exit($code);
+    case 'route:list':
+        foreach ($app->router->routes() as [$method, $path]) {
+            printf("%-8s %s\n", $method, $path);
+        }
+        break;
+    case 'help':
+        echo "NovaPHP CLI\n  php nova serve [127.0.0.1:8000]\n  php nova route:list\n";
+        break;
+    default:
+        fwrite(STDERR, "Unknown command: {$command}\n");
+        exit(1);
+}

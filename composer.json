@@ -1,0 +1,8 @@
+{
+  "name": "novaphp/novaphp",
+  "description": "NovaPHP Phase 1 standalone MVC framework",
+  "type": "project",
+  "require": {"php": "^8.2"},
+  "autoload": {"psr-4": {"App\\": "app/", "Nova\\": "src/"}},
+  "scripts": {"test": "@php tests/run.php"}
+}
